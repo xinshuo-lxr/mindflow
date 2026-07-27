@@ -1,0 +1,3 @@
+com.xinshuo.mindflow.framework.config.WebAutoConfiguration
+com.xinshuo.mindflow.framework.config.DataBaseConfiguration
+com.xinshuo.mindflow.framework.config.RocketMQAutoConfiguration
