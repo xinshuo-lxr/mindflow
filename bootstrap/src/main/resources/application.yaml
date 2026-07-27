@@ -1,0 +1,83 @@
+server:
+  port: ${SERVER_PORT:9090}
+  servlet:
+    context-path: /api/mindflow
+
+spring:
+  application:
+    name: mindflow-service
+
+  datasource:
+    driver-class-name: org.postgresql.Driver
+    type: com.zaxxer.hikari.HikariDataSource
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    url: jdbc:postgresql://${DB_HOST:127.0.0.1}:${DB_PORT:5432}/${DB_NAME:mindflow}?client_encoding=UTF8
+    hikari:
+      connection-timeout: 5000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+      maximum-pool-size: 10
+      minimum-idle: 5
+      pool-name: MindflowHikariPool
+
+  data:
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+
+rocketmq:
+  name-server: ${ROCKETMQ_NAME_SERVER}
+  producer:
+    group: mindflow-producer_pg
+    send-message-timeout: 2000
+
+milvus:
+  uri: ${MILVUS_URI:http://localhost:19530}
+
+ai:
+  providers:
+    ollama:
+      url: ${AI_OLLAMA_URL:http://localhost:11434}
+      api-key: ${AI_OLLAMA_API_KEY:}
+      endpoints:
+        chat: /v1/chat/completions
+        embedding: /v1/embeddings
+    bailian:
+      url: https://dashscope.aliyuncs.com
+      api-key: ${AI_BAILIAN_API_KEY}
+      endpoints:
+        chat: /compatible-mode/v1/chat/completions
+        rerank: /api/v1/services/rerank/text-rerank/text-rerank
+    siliconflow:
+      url: https://api.siliconflow.cn
+      api-key: ${AI_SILICONFLOW_API_KEY}
+      endpoints:
+        chat: /v1/chat/completions
+        embedding: /v1/embeddings
+
+  chat:
+    default-model: ${AI_CHAT_DEFAULT_MODEL:qwen-plus}
+    candidates:
+      - { id: qwen-plus, provider: bailian, model: qwen-plus-latest, priority: 1 }
+      - { id: qwen-local, provider: ollama, model: qwen3:8b, priority: 2 }
+
+  embedding:
+    default-model: ${AI_EMBEDDING_DEFAULT_MODEL:qwen-emb-8b}
+    candidates:
+      - { id: qwen-emb-8b, provider: siliconflow, model: Qwen/Qwen3-Embedding-8B, priority: 1 }
+
+  rerank:
+    default-model: ${AI_RERANK_DEFAULT_MODEL:qwen3-rerank}
+    candidates:
+      - { id: qwen3-rerank, provider: bailian, model: qwen3-rerank, priority: 1 }
+
+sa-token:
+  token-name: Authorization
+  timeout: 2592000
+  is-concurrent: true
+  is-share: false
+  token-style: simple-uuid
+  is-log: false
+  is-print: false
