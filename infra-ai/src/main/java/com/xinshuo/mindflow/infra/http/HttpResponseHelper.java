@@ -2,6 +2,8 @@ package com.xinshuo.mindflow.infra.http;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
+import com.xinshuo.mindflow.infra.config.AIModelProperties;
+import com.xinshuo.mindflow.infra.model.ModelTarget;
 import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
 import okhttp3.ResponseBody;
@@ -41,5 +43,34 @@ public final class HttpResponseHelper {
         }
         String content = body.string();
         return GSON.fromJson(content, JsonObject.class);
+    }
+
+    /**
+     * 校验并返回提供商配置
+     */
+    public static AIModelProperties.ProviderConfig requireProvider(ModelTarget target, String label) {
+        if (target == null || target.provider() == null) {
+            throw new IllegalStateException(label + " 提供商配置缺失");
+        }
+        return target.provider();
+    }
+
+    /**
+     * 校验提供商 API 密钥
+     */
+    public static void requireApiKey(AIModelProperties.ProviderConfig provider, String label) {
+        if (provider.getApiKey() == null || provider.getApiKey().isBlank()) {
+            throw new IllegalStateException(label + " API密钥缺失");
+        }
+    }
+
+    /**
+     * 校验并返回模型名称
+     */
+    public static String requireModel(ModelTarget target, String label) {
+        if (target == null || target.candidate() == null || target.candidate().getModel() == null) {
+            throw new IllegalStateException(label + " 模型名称缺失");
+        }
+        return target.candidate().getModel();
     }
 }
