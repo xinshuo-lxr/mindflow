@@ -141,7 +141,7 @@ public class ModelHealthStore {
 
     private enum State {
         CLOSED,
-        OPEN,
-        HALF_OPEN
+        OPEN, // 熔断
+        HALF_OPEN // 允许一个
     }
 }
