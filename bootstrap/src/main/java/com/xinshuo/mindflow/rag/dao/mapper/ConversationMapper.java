@@ -15,28 +15,10 @@
  * limitations under the License.
  */
 
-package com.xinshuo.mindflow.rag.service;
+package com.xinshuo.mindflow.rag.dao.mapper;
 
-import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import com.xinshuo.mindflow.rag.dao.entity.ConversationDO;
 
-/**
- * RAG 对话服务接口
- */
-public interface RAGChatService {
-
-    /**
-     * 发起一次 SSE 流式问答
-     *
-     * @param message        用户问题
-     * @param conversationId 会话 ID，为空时自动创建新会话
-     * @param emitter        SSE 发射器
-     */
-    void streamChat(String message, String conversationId, SseEmitter emitter);
-
-    /**
-     * 停止指定任务的流式输出
-     *
-     * @param taskId 任务 ID
-     */
-    void stopTask(String taskId);
+public interface ConversationMapper extends BaseMapper<ConversationDO> {
 }

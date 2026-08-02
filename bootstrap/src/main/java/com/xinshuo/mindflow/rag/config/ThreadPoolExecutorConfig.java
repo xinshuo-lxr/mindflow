@@ -28,13 +28,16 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * 线程池配置——SSE 流式对话使用独立线程池，不阻塞 Tomcat 工作线程
+ * 线程池配置
  */
 @Configuration
 public class ThreadPoolExecutorConfig {
 
     private final AtomicInteger threadId = new AtomicInteger(0);
 
+    /**
+     * SSE 流式对话线程池——不阻塞 Tomcat 工作线程
+     */
     @Bean
     public Executor chatExecutor() {
         ThreadPoolExecutor executor = new ThreadPoolExecutor(
@@ -43,6 +46,25 @@ public class ThreadPoolExecutorConfig {
                 new LinkedBlockingQueue<>(200),
                 r -> {
                     Thread t = new Thread(r, "chat-" + threadId.incrementAndGet());
+                    t.setDaemon(true);
+                    return t;
+                },
+                new ThreadPoolExecutor.CallerRunsPolicy()
+        );
+        return TtlExecutors.getTtlExecutor(executor);
+    }
+
+    /**
+     * 记忆加载线程池——并行加载摘要 + 历史消息
+     */
+    @Bean
+    public Executor memoryLoadExecutor() {
+        ThreadPoolExecutor executor = new ThreadPoolExecutor(
+                2, 4,
+                60L, TimeUnit.SECONDS,
+                new LinkedBlockingQueue<>(100),
+                r -> {
+                    Thread t = new Thread(r, "memory-load-" + threadId.incrementAndGet());
                     t.setDaemon(true);
                     return t;
                 },

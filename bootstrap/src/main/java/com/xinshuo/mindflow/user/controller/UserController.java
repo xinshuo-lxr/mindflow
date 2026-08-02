@@ -62,7 +62,7 @@ public class UserController {
      * 更新用户
      */
     @PutMapping("/users/{id}")
-    public Result<Void> update(@PathVariable String id, @RequestBody UserUpdateRequest requestParam) {
+    public Result<Void> update(@PathVariable("id") String id, @RequestBody UserUpdateRequest requestParam) {
         StpUtil.checkRole("admin");
         userService.update(id, requestParam);
         return Results.success();
@@ -72,7 +72,7 @@ public class UserController {
      * 删除用户
      */
     @DeleteMapping("/users/{id}")
-    public Result<Void> delete(@PathVariable String id) {
+    public Result<Void> delete(@PathVariable("id") String id) {
         StpUtil.checkRole("admin");
         userService.delete(id);
         return Results.success();
@@ -87,3 +87,4 @@ public class UserController {
         return Results.success();
     }
 }
+

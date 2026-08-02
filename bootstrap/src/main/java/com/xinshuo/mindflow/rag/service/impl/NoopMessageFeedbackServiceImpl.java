@@ -15,28 +15,39 @@
  * limitations under the License.
  */
 
-package com.xinshuo.mindflow.rag.service;
+package com.xinshuo.mindflow.rag.service.impl;
 
-import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import com.xinshuo.mindflow.rag.service.MessageFeedbackService;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
+import java.util.Map;
 
 /**
- * RAG 对话服务接口
+ * 消息反馈服务空实现
  */
-public interface RAGChatService {
+@Slf4j
+@Service
+public class NoopMessageFeedbackServiceImpl implements MessageFeedbackService {
 
-    /**
-     * 发起一次 SSE 流式问答
-     *
-     * @param message        用户问题
-     * @param conversationId 会话 ID，为空时自动创建新会话
-     * @param emitter        SSE 发射器
-     */
-    void streamChat(String message, String conversationId, SseEmitter emitter);
+    @Override
+    public void submitFeedback(String messageId, Object request) {
 
-    /**
-     * 停止指定任务的流式输出
-     *
-     * @param taskId 任务 ID
-     */
-    void stopTask(String taskId);
+    }
+
+    @Override
+    public void submitFeedbackAsync(String messageId, Object request) {
+
+    }
+
+    @Override
+    public void submitFeedbackByEvent(Object event) {
+
+    }
+
+    @Override
+    public Map<String, Integer> getUserVotes(String userId, List<String> messageIds) {
+        return Map.of();
+    }
 }

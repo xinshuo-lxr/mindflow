@@ -15,28 +15,24 @@
  * limitations under the License.
  */
 
-package com.xinshuo.mindflow.rag.service;
+package com.xinshuo.mindflow.rag.trace;
 
-import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import com.xinshuo.mindflow.framework.trace.RagStreamTraceSupport;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Component;
 
 /**
- * RAG 对话服务接口
+ * 跨线程 stream trace 空实现
+ *
+ * <p>当前 trace 功能未启用，所有 span 操作均为 no-op，
+ * 保证 AbstractOpenAIStyleChatClient 的 {@code @Autowired RagStreamTraceSupport} 正常注入。
  */
-public interface RAGChatService {
+@Slf4j
+@Component
+public class RagStreamTraceSupportImpl implements RagStreamTraceSupport {
 
-    /**
-     * 发起一次 SSE 流式问答
-     *
-     * @param message        用户问题
-     * @param conversationId 会话 ID，为空时自动创建新会话
-     * @param emitter        SSE 发射器
-     */
-    void streamChat(String message, String conversationId, SseEmitter emitter);
-
-    /**
-     * 停止指定任务的流式输出
-     *
-     * @param taskId 任务 ID
-     */
-    void stopTask(String taskId);
+    @Override
+    public StreamSpan beginStreamNode(String name, String type) {
+        return NOOP_SPAN;
+    }
 }

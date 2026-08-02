@@ -17,26 +17,19 @@
 
 package com.xinshuo.mindflow.rag.service;
 
-import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import java.util.List;
+import java.util.Map;
 
 /**
- * RAG 对话服务接口
+ * 消息反馈服务接口——第 6 步仅定义，第 20 步实现
  */
-public interface RAGChatService {
+public interface MessageFeedbackService {
 
-    /**
-     * 发起一次 SSE 流式问答
-     *
-     * @param message        用户问题
-     * @param conversationId 会话 ID，为空时自动创建新会话
-     * @param emitter        SSE 发射器
-     */
-    void streamChat(String message, String conversationId, SseEmitter emitter);
+    void submitFeedback(String messageId, Object request);
 
-    /**
-     * 停止指定任务的流式输出
-     *
-     * @param taskId 任务 ID
-     */
-    void stopTask(String taskId);
+    void submitFeedbackAsync(String messageId, Object request);
+
+    void submitFeedbackByEvent(Object event);
+
+    Map<String, Integer> getUserVotes(String userId, List<String> messageIds);
 }

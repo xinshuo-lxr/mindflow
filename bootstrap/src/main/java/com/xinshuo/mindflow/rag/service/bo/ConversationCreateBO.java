@@ -15,28 +15,26 @@
  * limitations under the License.
  */
 
-package com.xinshuo.mindflow.rag.service;
+package com.xinshuo.mindflow.rag.service.bo;
 
-import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 
-/**
- * RAG 对话服务接口
- */
-public interface RAGChatService {
+import java.util.Date;
 
-    /**
-     * 发起一次 SSE 流式问答
-     *
-     * @param message        用户问题
-     * @param conversationId 会话 ID，为空时自动创建新会话
-     * @param emitter        SSE 发射器
-     */
-    void streamChat(String message, String conversationId, SseEmitter emitter);
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class ConversationCreateBO {
 
-    /**
-     * 停止指定任务的流式输出
-     *
-     * @param taskId 任务 ID
-     */
-    void stopTask(String taskId);
+    private String conversationId;
+
+    private String userId;
+
+    private String question;
+
+    private Date lastTime;
 }

@@ -11,6 +11,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @SpringBootApplication
 @EnableScheduling
 @MapperScan(basePackages = {
+        "com.xinshuo.mindflow.rag.dao.mapper",
         "com.xinshuo.mindflow.user.dao.mapper"
 })
 public class MindflowApplication {

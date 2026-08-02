@@ -29,4 +29,9 @@ public class ChatStreamRequest {
      * 用户输入的消息内容
      */
     private String message;
+
+    /**
+     * 会话 ID，为空时自动创建新会话
+     */
+    private String conversationId;
 }

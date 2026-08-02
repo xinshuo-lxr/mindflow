@@ -25,7 +25,6 @@ spring:
     redis:
       host: ${REDIS_HOST}
       port: ${REDIS_PORT:6379}
-      password: ${REDIS_PASSWORD:}
 
 rocketmq:
   name-server: ${ROCKETMQ_NAME_SERVER}
@@ -81,3 +80,4 @@ sa-token:
   token-style: simple-uuid
   is-log: false
   is-print: false
+

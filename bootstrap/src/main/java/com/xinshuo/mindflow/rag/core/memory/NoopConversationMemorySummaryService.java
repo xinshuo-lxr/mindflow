@@ -15,28 +15,31 @@
  * limitations under the License.
  */
 
-package com.xinshuo.mindflow.rag.service;
+package com.xinshuo.mindflow.rag.core.memory;
 
-import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import com.xinshuo.mindflow.framework.convention.ChatMessage;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
 
 /**
- * RAG 对话服务接口
+ * 空摘要服务
  */
-public interface RAGChatService {
+@Slf4j
+@Service
+public class NoopConversationMemorySummaryService implements ConversationMemorySummaryService {
 
-    /**
-     * 发起一次 SSE 流式问答
-     *
-     * @param message        用户问题
-     * @param conversationId 会话 ID，为空时自动创建新会话
-     * @param emitter        SSE 发射器
-     */
-    void streamChat(String message, String conversationId, SseEmitter emitter);
+    @Override
+    public void compressIfNeeded(String conversationId, String userId, ChatMessage message) {
 
-    /**
-     * 停止指定任务的流式输出
-     *
-     * @param taskId 任务 ID
-     */
-    void stopTask(String taskId);
+    }
+
+    @Override
+    public ChatMessage loadLatestSummary(String conversationId, String userId) {
+        return null;
+    }
+
+    @Override
+    public ChatMessage decorateIfNeeded(ChatMessage summary) {
+        return summary;
+    }
 }

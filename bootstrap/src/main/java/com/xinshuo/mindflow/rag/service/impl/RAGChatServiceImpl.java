@@ -18,12 +18,15 @@
 package com.xinshuo.mindflow.rag.service.impl;
 
 import cn.hutool.core.util.IdUtil;
+import cn.hutool.core.util.StrUtil;
 
+import com.xinshuo.mindflow.framework.context.UserContext;
 import com.xinshuo.mindflow.framework.convention.ChatMessage;
 import com.xinshuo.mindflow.framework.convention.ChatRequest;
 import com.xinshuo.mindflow.infra.chat.LLMService;
 import com.xinshuo.mindflow.infra.chat.StreamCallback;
 import com.xinshuo.mindflow.infra.chat.StreamCancellationHandle;
+import com.xinshuo.mindflow.rag.core.memory.ConversationMemoryService;
 import com.xinshuo.mindflow.rag.service.RAGChatService;
 import com.xinshuo.mindflow.rag.service.handler.StreamCallbackFactory;
 import com.xinshuo.mindflow.rag.service.handler.StreamTaskManager;
@@ -32,12 +35,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
- * RAG 对话服务默认实现——第 5 步：纯 LLM 流式对话。
- *
- * <p>后续步骤会在此之上叠加：会话记忆 → 向量检索 → 意图分类 → ... → 8 阶段管道
+ * RAG 对话服务实现——LLM 流式对话，支持多轮对话记忆
+ * <p>后续步骤会在此之上叠加：向量检索 → 意图分类 → ... → 8 阶段管道
  */
 @Slf4j
 @Service
@@ -47,14 +50,28 @@ public class RAGChatServiceImpl implements RAGChatService {
     private final LLMService llmService;
     private final StreamCallbackFactory callbackFactory;
     private final StreamTaskManager taskManager;
+    private final ConversationMemoryService memoryService;
 
     @Override
-    public void streamChat(String message, SseEmitter emitter) {
+    public void streamChat(String message, String conversationId, SseEmitter emitter) {
+        String userId = UserContext.getUserId();
+        String actualConversationId = StrUtil.isBlank(conversationId)
+                ? IdUtil.getSnowflakeNextIdStr() : conversationId;
         String taskId = IdUtil.getSnowflakeNextIdStr();
-        StreamCallback callback = callbackFactory.createChatEventHandler(emitter, taskId);
+
+        StreamCallback callback = callbackFactory.createChatEventHandler(
+                emitter, actualConversationId, taskId);
+
+        // 加载历史 + 保存用户消息
+        List<ChatMessage> history = memoryService.loadAndAppend(
+                actualConversationId, userId, ChatMessage.user(message));
+
+        // loadAndAppend 返回的是追加前的历史，当前用户消息仍需加入模型请求。
+        List<ChatMessage> messages = new ArrayList<>(history);
+        messages.add(ChatMessage.user(message));
 
         ChatRequest chatRequest = ChatRequest.builder()
-                .messages(List.of(ChatMessage.user(message)))
+                .messages(messages)
                 .build();
 
         StreamCancellationHandle handle = llmService.streamChat(chatRequest, callback);
@@ -66,3 +83,4 @@ public class RAGChatServiceImpl implements RAGChatService {
         taskManager.cancel(taskId);
     }
 }
+

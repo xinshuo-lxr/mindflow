@@ -18,12 +18,13 @@
 package com.xinshuo.mindflow.rag.service.handler;
 
 import com.xinshuo.mindflow.infra.config.AIModelProperties;
+import com.xinshuo.mindflow.rag.core.memory.ConversationMemoryService;
 import lombok.Builder;
 import lombok.Getter;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 /**
- * StreamChatEventHandler 构建参数，封装所有 Handler 需要的上下文
+ * StreamChatEventHandler 构建参数
  */
 @Getter
 @Builder
@@ -31,9 +32,13 @@ public class StreamChatHandlerParams {
 
     private final SseEmitter emitter;
 
+    private final String conversationId;
+
     private final String taskId;
 
     private final AIModelProperties modelProperties;
 
     private final StreamTaskManager taskManager;
+
+    private final ConversationMemoryService memoryService;
 }

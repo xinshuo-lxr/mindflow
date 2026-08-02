@@ -19,12 +19,13 @@ package com.xinshuo.mindflow.rag.service.handler;
 
 import com.xinshuo.mindflow.infra.chat.StreamCallback;
 import com.xinshuo.mindflow.infra.config.AIModelProperties;
+import com.xinshuo.mindflow.rag.core.memory.ConversationMemoryService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 /**
- * StreamCallback 工厂——把 LLM 层的 StreamCallback 适配到 SSE 层的 SseEmitterSender
+ * StreamCallback 工厂——创建带持久化能力的 StreamChatEventHandler
  */
 @Component
 @RequiredArgsConstructor
@@ -32,13 +33,16 @@ public class StreamCallbackFactory {
 
     private final AIModelProperties modelProperties;
     private final StreamTaskManager taskManager;
+    private final ConversationMemoryService memoryService;
 
-    public StreamCallback createChatEventHandler(SseEmitter emitter, String taskId) {
+    public StreamCallback createChatEventHandler(SseEmitter emitter, String conversationId, String taskId) {
         StreamChatHandlerParams params = StreamChatHandlerParams.builder()
                 .emitter(emitter)
+                .conversationId(conversationId)
                 .taskId(taskId)
                 .modelProperties(modelProperties)
                 .taskManager(taskManager)
+                .memoryService(memoryService)
                 .build();
         return new StreamChatEventHandler(params);
     }
