@@ -19,7 +19,7 @@ package com.xinshuo.mindflow.knowledge.controller.vo;
 
 import lombok.Data;
 
-import java.util.Date;
+import java.time.LocalDateTime;
 
 /**
  * 知识库前端返回对象
@@ -60,10 +60,10 @@ public class KnowledgeBaseVO {
     /**
      * 创建时间
      */
-    private Date createTime;
+    private LocalDateTime createTime;
 
     /**
      * 更新时间
      */
-    private Date updateTime;
+    private LocalDateTime updateTime;
 }

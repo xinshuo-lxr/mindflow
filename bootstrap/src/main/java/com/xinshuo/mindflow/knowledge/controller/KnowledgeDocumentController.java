@@ -100,7 +100,7 @@ public class KnowledgeDocumentController {
      * 查询文档详情
      */
     @GetMapping("/knowledge-base/docs/{docId}")
-    public Result<KnowledgeDocumentVO> get(@PathVariable String docId) {
+    public Result<KnowledgeDocumentVO> get(@PathVariable("docId") String docId) {
         return Results.success(documentService.get(docId));
     }
 
@@ -108,7 +108,7 @@ public class KnowledgeDocumentController {
      * 更新文档信息
      */
     @PutMapping("/knowledge-base/docs/{docId}")
-    public Result<Void> update(@PathVariable String docId,
+    public Result<Void> update(@PathVariable("docId") String docId,
                                @RequestBody KnowledgeDocumentUpdateRequest requestParam) {
         documentService.update(docId, requestParam);
         return Results.success();
@@ -136,7 +136,7 @@ public class KnowledgeDocumentController {
      * 启用/禁用文档
      */
     @PatchMapping("/knowledge-base/docs/{docId}/enable")
-    public Result<Void> enable(@PathVariable String docId,
+    public Result<Void> enable(@PathVariable("docId") String docId,
                                @RequestParam("value") boolean enabled) {
         documentService.enable(docId, enabled);
         return Results.success();
@@ -146,7 +146,7 @@ public class KnowledgeDocumentController {
      * 获取文档源文件（用于 PDF/图片等浏览器原生支持的格式直接渲染）
      */
     @GetMapping("/knowledge-base/docs/{docId}/file")
-    public void file(@PathVariable String docId, HttpServletResponse response) throws Exception {
+    public void file(@PathVariable("docId") String docId, HttpServletResponse response) throws Exception {
         var doc = documentService.get(docId);
         String fileType = doc.getFileType() != null ? doc.getFileType().toLowerCase() : "";
         String contentType = CONTENT_TYPE_MAP.getOrDefault(fileType, "application/octet-stream");
