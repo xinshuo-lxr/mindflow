@@ -1,0 +1,12 @@
+ai:
+  providers:
+    bailian:
+      url: https://dashscope.aliyuncs.com
+      api-key: ${BAILIAN_API_KEY:}
+      endpoints:
+        chat: /compatible-mode/v1/chat/completions
+
+  chat:
+    default-model: qwen-plus
+    candidates:
+      - { id: qwen-plus, provider: bailian, model: qwen-plus-latest, priority: 1 }

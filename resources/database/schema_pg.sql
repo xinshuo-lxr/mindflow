@@ -722,3 +722,77 @@ COMMENT ON COLUMN t_ingestion_task_node.output_json IS '节点输出JSON(全量)
 COMMENT ON COLUMN t_ingestion_task_node.create_time IS '创建时间';
 COMMENT ON COLUMN t_ingestion_task_node.update_time IS '更新时间';
 COMMENT ON COLUMN t_ingestion_task_node.deleted IS '是否删除 0：正常 1：删除';
+
+-- ============================================
+-- Knowledge Base Tables (Step 7)
+-- ============================================
+
+CREATE TABLE t_knowledge_base (
+    id              VARCHAR(20)  NOT NULL PRIMARY KEY,
+    name            VARCHAR(255) NOT NULL,
+    embedding_model VARCHAR(255),
+    collection_name VARCHAR(255),
+    created_by      VARCHAR(64),
+    updated_by      VARCHAR(64),
+    create_time     TIMESTAMP  DEFAULT CURRENT_TIMESTAMP,
+    update_time     TIMESTAMP  DEFAULT CURRENT_TIMESTAMP,
+    deleted         SMALLINT     DEFAULT 0
+);
+COMMENT ON TABLE t_knowledge_base IS '知识库表';
+COMMENT ON COLUMN t_knowledge_base.id IS '主键ID';
+COMMENT ON COLUMN t_knowledge_base.name IS '知识库名称';
+COMMENT ON COLUMN t_knowledge_base.embedding_model IS '嵌入模型标识';
+COMMENT ON COLUMN t_knowledge_base.collection_name IS 'Milvus Collection 名称';
+COMMENT ON COLUMN t_knowledge_base.created_by IS '创建人';
+COMMENT ON COLUMN t_knowledge_base.updated_by IS '修改人';
+COMMENT ON COLUMN t_knowledge_base.create_time IS '创建时间';
+COMMENT ON COLUMN t_knowledge_base.update_time IS '更新时间';
+COMMENT ON COLUMN t_knowledge_base.deleted IS '是否删除 0：正常 1：删除';
+
+CREATE TABLE t_knowledge_document (
+    id               VARCHAR(20)  NOT NULL PRIMARY KEY,
+    kb_id            VARCHAR(20)  NOT NULL,
+    doc_name         VARCHAR(512) NOT NULL,
+    source_type      VARCHAR(32),
+    source_location  TEXT,
+    schedule_enabled SMALLINT     DEFAULT 0,
+    schedule_cron    VARCHAR(128),
+    enabled          SMALLINT     DEFAULT 1,
+    chunk_count      INT          DEFAULT 0,
+    file_url         TEXT,
+    file_type        VARCHAR(64),
+    file_size        BIGINT,
+    process_mode     VARCHAR(32),
+    chunk_strategy   VARCHAR(64),
+    chunk_config     JSONB,
+    pipeline_id      VARCHAR(64),
+    status           VARCHAR(32)  DEFAULT 'pending',
+    created_by       VARCHAR(64),
+    updated_by       VARCHAR(64),
+    create_time      TIMESTAMP  DEFAULT CURRENT_TIMESTAMP,
+    update_time      TIMESTAMP  DEFAULT CURRENT_TIMESTAMP,
+    deleted          SMALLINT     DEFAULT 0
+);
+COMMENT ON TABLE t_knowledge_document IS '知识库文档表';
+COMMENT ON COLUMN t_knowledge_document.id IS '主键ID';
+COMMENT ON COLUMN t_knowledge_document.kb_id IS '所属知识库ID';
+COMMENT ON COLUMN t_knowledge_document.doc_name IS '文档名称';
+COMMENT ON COLUMN t_knowledge_document.source_type IS '来源类型：file/url';
+COMMENT ON COLUMN t_knowledge_document.source_location IS '来源位置URL';
+COMMENT ON COLUMN t_knowledge_document.schedule_enabled IS '是否开启定时拉取';
+COMMENT ON COLUMN t_knowledge_document.schedule_cron IS '定时表达式';
+COMMENT ON COLUMN t_knowledge_document.enabled IS '是否启用';
+COMMENT ON COLUMN t_knowledge_document.chunk_count IS '分块数';
+COMMENT ON COLUMN t_knowledge_document.file_url IS '文件地址';
+COMMENT ON COLUMN t_knowledge_document.file_type IS '文件类型';
+COMMENT ON COLUMN t_knowledge_document.file_size IS '文件大小(字节)';
+COMMENT ON COLUMN t_knowledge_document.process_mode IS '处理模式：chunk/pipeline';
+COMMENT ON COLUMN t_knowledge_document.chunk_strategy IS '分块策略';
+COMMENT ON COLUMN t_knowledge_document.chunk_config IS '分块参数配置JSON';
+COMMENT ON COLUMN t_knowledge_document.pipeline_id IS 'Pipeline ID';
+COMMENT ON COLUMN t_knowledge_document.status IS '状态 pending/running/failed/success';
+COMMENT ON COLUMN t_knowledge_document.created_by IS '创建人';
+COMMENT ON COLUMN t_knowledge_document.updated_by IS '更新人';
+COMMENT ON COLUMN t_knowledge_document.create_time IS '创建时间';
+COMMENT ON COLUMN t_knowledge_document.update_time IS '更新时间';
+COMMENT ON COLUMN t_knowledge_document.deleted IS '是否删除 0：正常 1：删除';
