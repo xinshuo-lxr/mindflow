@@ -25,8 +25,17 @@ import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.xinshuo.mindflow.core.chunk.ChunkEmbeddingService;
+import com.xinshuo.mindflow.core.chunk.ChunkingMode;
+import com.xinshuo.mindflow.core.chunk.StructuredChunkingService;
+import com.xinshuo.mindflow.core.chunk.VectorChunk;
+import com.xinshuo.mindflow.core.parser.BlockTextRenderer;
+import com.xinshuo.mindflow.core.parser.DocumentParser;
+import com.xinshuo.mindflow.core.parser.DocumentParserSelector;
+import com.xinshuo.mindflow.core.parser.model.ParsedDocument;
 import com.xinshuo.mindflow.framework.context.UserContext;
 import com.xinshuo.mindflow.framework.exception.ClientException;
+import com.xinshuo.mindflow.ingestion.util.MimeTypeDetector;
 import com.xinshuo.mindflow.knowledge.controller.request.KnowledgeDocumentPageRequest;
 import com.xinshuo.mindflow.knowledge.controller.request.KnowledgeDocumentUpdateRequest;
 import com.xinshuo.mindflow.knowledge.controller.request.KnowledgeDocumentUploadRequest;
@@ -50,6 +59,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.InputStream;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -59,8 +69,6 @@ import java.util.Set;
 
 /**
  * 知识库文档服务实现
- * 第 7 步：仅实现文档上传 + 基础 CRUD
- * 第 8-9 步：补充 startChunk / executeChunk / enable / preview
  */
 @Slf4j
 @Service
@@ -70,13 +78,15 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
     private final KnowledgeBaseMapper knowledgeBaseMapper;
     private final KnowledgeDocumentMapper documentMapper;
     private final FileStorageService fileStorageService;
+    private final DocumentParserSelector parserSelector;
+    private final StructuredChunkingService structuredChunkingService;
+    private final ChunkEmbeddingService chunkEmbeddingService;
 
     @Override
     public KnowledgeDocumentVO upload(String kbId, KnowledgeDocumentUploadRequest requestParam, MultipartFile file) {
         KnowledgeBaseDO kbDO = knowledgeBaseMapper.selectById(kbId);
         Assert.notNull(kbDO, () -> new ClientException("知识库不存在"));
 
-        // 默认 sourceType 为 file
         if (!StringUtils.hasText(requestParam.getSourceType())) {
             requestParam.setSourceType(SourceType.FILE.getValue());
         }
@@ -86,19 +96,15 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
             Assert.notNull(file, () -> new ClientException("上传文件不能为空"));
         }
         if (SourceType.URL == sourceType) {
-            // 第 21 步：支持 URL 远程拉取
-            throw new ClientException("第 7 步暂不支持 URL 来源，请使用 file 上传");
+            throw new ClientException("暂不支持 URL 来源，请使用 file 上传");
         }
 
-        // 确保 bucket 目录存在
         if (!fileStorageService.bucketExists(kbDO.getCollectionName())) {
             fileStorageService.createBucket(kbDO.getCollectionName());
         }
 
-        // 上传文件到本地存储
         StoredFileDTO stored = fileStorageService.upload(kbDO.getCollectionName(), file);
 
-        // 解析处理模式
         ProcessMode processMode = resolveProcessMode(requestParam);
 
         KnowledgeDocumentDO documentDO = KnowledgeDocumentDO.builder()
@@ -126,20 +132,72 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
 
         log.info("文档上传成功, kbId={}, docId={}, docName={}, fileType={}",
                 kbId, documentDO.getId(), documentDO.getDocName(), documentDO.getFileType());
-
         return BeanUtil.toBean(documentDO, KnowledgeDocumentVO.class);
     }
 
     @Override
     public void startChunk(String docId) {
-        //后续实现：发送 MQ 消息触发分块
-        throw new UnsupportedOperationException("第 8-9 步实现");
+        // 第 22 步：接入 MQ 事务消息
+        executeChunk(docId);
     }
 
     @Override
     public void executeChunk(String docId) {
-        // 后续实现：文档解析 → 分块 → 嵌入 → 向量入库
-        throw new UnsupportedOperationException("第 8-9 步实现");
+        KnowledgeDocumentDO doc = documentMapper.selectById(docId);
+        if (doc == null) {
+            log.warn("文档不存在，跳过分块, docId={}", docId);
+            return;
+        }
+        // 状态流转: pending → running
+        documentMapper.update(
+                new LambdaUpdateWrapper<KnowledgeDocumentDO>()
+                        .set(KnowledgeDocumentDO::getStatus, DocumentStatus.RUNNING.getCode())
+                        .eq(KnowledgeDocumentDO::getId, docId)
+                        .ne(KnowledgeDocumentDO::getStatus, DocumentStatus.RUNNING.getCode())
+        );
+
+        try {
+            KnowledgeBaseDO kb = knowledgeBaseMapper.selectById(doc.getKbId());
+            ChunkingMode mode = ChunkingMode.fromValue(doc.getChunkStrategy());
+
+            // 阶段1: 提取——按 MIME 路由解析器
+            byte[] fileBytes;
+            try (InputStream is = fileStorageService.openStream(doc.getFileUrl())) {
+                fileBytes = is.readAllBytes();
+            }
+            String mime = MimeTypeDetector.detect(fileBytes, doc.getDocName());
+            DocumentParser parser = parserSelector.selectByMimeType(mime);
+            if (parser == null) {
+                throw new ClientException("未找到 MIME [" + mime + "] 对应的解析器");
+            }
+            ParsedDocument parsed = parser.parseStructured(fileBytes, mime,
+                    Map.of("sourceFile", doc.getDocName()));
+            String fallbackText = BlockTextRenderer.render(parsed.blocks());
+
+            // 阶段2: 分块
+            List<VectorChunk> chunks = structuredChunkingService.chunk(
+                    parsed.blocks(), fallbackText, mode,
+                    mode.createOptions(Map.of()), null);
+
+            // 阶段3: 嵌入
+            chunkEmbeddingService.embed(chunks, kb.getEmbeddingModel());
+
+            // 阶段4: 持久化——第 9 步接入 KnowledgeChunkService + VectorStoreService
+            log.info("文档分块完成, docId={}, chunks={}", docId, chunks.size());
+            documentMapper.update(
+                    new LambdaUpdateWrapper<KnowledgeDocumentDO>()
+                            .set(KnowledgeDocumentDO::getChunkCount, chunks.size())
+                            .set(KnowledgeDocumentDO::getStatus, DocumentStatus.SUCCESS.getCode())
+                            .eq(KnowledgeDocumentDO::getId, docId)
+            );
+        } catch (Exception e) {
+            log.error("文档分块失败, docId={}", docId, e);
+            documentMapper.update(
+                    new LambdaUpdateWrapper<KnowledgeDocumentDO>()
+                            .set(KnowledgeDocumentDO::getStatus, DocumentStatus.FAILED.getCode())
+                            .eq(KnowledgeDocumentDO::getId, docId)
+            );
+        }
     }
 
     @Override

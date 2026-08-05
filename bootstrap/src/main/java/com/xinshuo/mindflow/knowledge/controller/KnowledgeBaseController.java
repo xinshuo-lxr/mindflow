@@ -23,6 +23,8 @@ import com.xinshuo.mindflow.framework.web.Results;
 import com.xinshuo.mindflow.knowledge.controller.request.KnowledgeBaseCreateRequest;
 import com.xinshuo.mindflow.knowledge.controller.request.KnowledgeBasePageRequest;
 import com.xinshuo.mindflow.knowledge.controller.request.KnowledgeBaseUpdateRequest;
+import com.xinshuo.mindflow.core.chunk.ChunkingMode;
+import com.xinshuo.mindflow.knowledge.controller.vo.ChunkStrategyVO;
 import com.xinshuo.mindflow.knowledge.controller.vo.KnowledgeBaseVO;
 import com.xinshuo.mindflow.knowledge.service.KnowledgeBaseService;
 import lombok.RequiredArgsConstructor;
@@ -33,6 +35,9 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.Arrays;
+import java.util.List;
 
 /**
  * 知识库控制器
@@ -85,5 +90,17 @@ public class KnowledgeBaseController {
     @GetMapping("/knowledge-base")
     public Result<IPage<KnowledgeBaseVO>> pageQuery(KnowledgeBasePageRequest requestParam) {
         return Results.success(knowledgeBaseService.pageQuery(requestParam));
+    }
+
+    /**
+     * 查询支持的分块策略列表
+     */
+    @GetMapping("/knowledge-base/chunk-strategies")
+    public Result<List<ChunkStrategyVO>> listChunkStrategies() {
+        List<ChunkStrategyVO> list = Arrays.stream(ChunkingMode.values())
+                .filter(ChunkingMode::isVisible)
+                .map(mode -> new ChunkStrategyVO(mode.getValue(), mode.getLabel(), mode.getDefaultConfig()))
+                .toList();
+        return Results.success(list);
     }
 }
