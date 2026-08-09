@@ -38,6 +38,7 @@ import com.xinshuo.mindflow.framework.exception.ClientException;
 import com.xinshuo.mindflow.ingestion.util.MimeTypeDetector;
 import com.xinshuo.mindflow.knowledge.controller.request.KnowledgeDocumentPageRequest;
 import com.xinshuo.mindflow.knowledge.controller.request.KnowledgeDocumentUpdateRequest;
+import com.xinshuo.mindflow.knowledge.controller.request.KnowledgeChunkCreateRequest;
 import com.xinshuo.mindflow.knowledge.controller.request.KnowledgeDocumentUploadRequest;
 import com.xinshuo.mindflow.knowledge.controller.vo.KnowledgeDocumentChunkLogVO;
 import com.xinshuo.mindflow.knowledge.controller.vo.KnowledgeDocumentSearchVO;
@@ -49,15 +50,20 @@ import com.xinshuo.mindflow.knowledge.dao.mapper.KnowledgeDocumentMapper;
 import com.xinshuo.mindflow.knowledge.enums.DocumentStatus;
 import com.xinshuo.mindflow.knowledge.enums.ProcessMode;
 import com.xinshuo.mindflow.knowledge.enums.SourceType;
+import com.xinshuo.mindflow.knowledge.service.KnowledgeChunkService;
 import com.xinshuo.mindflow.knowledge.service.KnowledgeDocumentService;
+import com.xinshuo.mindflow.rag.core.vector.VectorStoreService;
 import com.xinshuo.mindflow.rag.dto.StoredFileDTO;
 import com.xinshuo.mindflow.rag.service.FileStorageService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionOperations;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
+
+import java.util.ArrayList;
 
 import java.io.InputStream;
 import java.util.Collections;
@@ -81,6 +87,9 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
     private final DocumentParserSelector parserSelector;
     private final StructuredChunkingService structuredChunkingService;
     private final ChunkEmbeddingService chunkEmbeddingService;
+    private final KnowledgeChunkService knowledgeChunkService;
+    private final VectorStoreService vectorStoreService;
+    private final TransactionOperations transactionOperations;
 
     @Override
     public KnowledgeDocumentVO upload(String kbId, KnowledgeDocumentUploadRequest requestParam, MultipartFile file) {
@@ -182,14 +191,30 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
             // 阶段3: 嵌入
             chunkEmbeddingService.embed(chunks, kb.getEmbeddingModel());
 
-            // 阶段4: 持久化——第 9 步接入 KnowledgeChunkService + VectorStoreService
-            log.info("文档分块完成, docId={}, chunks={}", docId, chunks.size());
-            documentMapper.update(
-                    new LambdaUpdateWrapper<KnowledgeDocumentDO>()
-                            .set(KnowledgeDocumentDO::getChunkCount, chunks.size())
-                            .set(KnowledgeDocumentDO::getStatus, DocumentStatus.SUCCESS.getCode())
-                            .eq(KnowledgeDocumentDO::getId, docId)
-            );
+            // 阶段4: 持久化——写入 t_knowledge_chunk + t_knowledge_vector
+            String collectionName = kb.getCollectionName();
+            List<KnowledgeChunkCreateRequest> chunkReqs = new ArrayList<>(chunks.size());
+            for (VectorChunk vc : chunks) {
+                KnowledgeChunkCreateRequest req = new KnowledgeChunkCreateRequest();
+                req.setChunkId(vc.getChunkId());
+                req.setIndex(vc.getIndex());
+                req.setContent(vc.getContent());
+                chunkReqs.add(req);
+            }
+            transactionOperations.executeWithoutResult(status -> {
+                knowledgeChunkService.deleteByDocId(docId);
+                knowledgeChunkService.batchCreate(docId, chunkReqs);
+                vectorStoreService.deleteDocumentVectors(collectionName, docId);
+                vectorStoreService.indexDocumentChunks(collectionName, docId, chunks);
+                documentMapper.update(
+                        new LambdaUpdateWrapper<KnowledgeDocumentDO>()
+                                .set(KnowledgeDocumentDO::getChunkCount, chunks.size())
+                                .set(KnowledgeDocumentDO::getStatus, DocumentStatus.SUCCESS.getCode())
+                                .set(KnowledgeDocumentDO::getUpdatedBy, UserContext.getUsername())
+                                .eq(KnowledgeDocumentDO::getId, docId)
+                );
+            });
+            log.info("文档分块+持久化完成, docId={}, chunks={}", docId, chunks.size());
         } catch (Exception e) {
             log.error("文档分块失败, docId={}", docId, e);
             documentMapper.update(

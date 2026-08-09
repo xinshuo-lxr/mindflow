@@ -35,6 +35,9 @@ import com.xinshuo.mindflow.knowledge.dao.entity.KnowledgeDocumentDO;
 import com.xinshuo.mindflow.knowledge.dao.mapper.KnowledgeBaseMapper;
 import com.xinshuo.mindflow.knowledge.dao.mapper.KnowledgeDocumentMapper;
 import com.xinshuo.mindflow.knowledge.service.KnowledgeBaseService;
+import com.xinshuo.mindflow.rag.core.vector.VectorSpaceId;
+import com.xinshuo.mindflow.rag.core.vector.VectorSpaceSpec;
+import com.xinshuo.mindflow.rag.core.vector.VectorStoreAdmin;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -54,6 +57,7 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
 
     private final KnowledgeBaseMapper knowledgeBaseMapper;
     private final KnowledgeDocumentMapper knowledgeDocumentMapper;
+    private final VectorStoreAdmin vectorStoreAdmin;
 
     @Transactional
     @Override
@@ -81,7 +85,11 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
         knowledgeBaseMapper.insert(kbDO);
         log.info("知识库创建成功, kbId={}, name={}", kbDO.getId(), kbDO.getName());
 
-        // 第 9 步：此处会补充 S3 建桶 + 向量空间初始化
+        // 确保 HNSW 索引就绪
+        vectorStoreAdmin.ensureVectorSpace(VectorSpaceSpec.builder()
+                .spaceId(VectorSpaceId.builder().logicalName(requestParam.getCollectionName()).build())
+                .remark(requestParam.getName())
+                .build());
 
         return String.valueOf(kbDO.getId());
     }

@@ -15,27 +15,10 @@
  * limitations under the License.
  */
 
-package com.xinshuo.mindflow.rag.config;
+package com.xinshuo.mindflow.knowledge.dao.mapper;
 
-import lombok.Data;
-import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.context.annotation.Configuration;
+import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import com.xinshuo.mindflow.knowledge.dao.entity.KnowledgeChunkDO;
 
-/**
- * RAG 系统默认配置
- */
-@Data
-@Configuration
-@ConfigurationProperties(prefix = "rag.default")
-public class RAGDefaultProperties {
-
-    /**
-     * SSE 全局超时时间（毫秒），兜底防止连接泄漏，默认 5 分钟
-     */
-    private Long sseTimeoutMs = 5 * 60 * 1000L;
-
-    /**
-     * 默认向量维度（如 bge-m3: 1024）
-     */
-    private int dimension = 1024;
+public interface KnowledgeChunkMapper extends BaseMapper<KnowledgeChunkDO> {
 }

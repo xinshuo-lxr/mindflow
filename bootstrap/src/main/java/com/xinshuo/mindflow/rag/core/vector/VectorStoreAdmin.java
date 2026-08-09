@@ -15,27 +15,14 @@
  * limitations under the License.
  */
 
-package com.xinshuo.mindflow.rag.config;
-
-import lombok.Data;
-import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.context.annotation.Configuration;
+package com.xinshuo.mindflow.rag.core.vector;
 
 /**
- * RAG 系统默认配置
+ * 向量空间元数据/索引管理
  */
-@Data
-@Configuration
-@ConfigurationProperties(prefix = "rag.default")
-public class RAGDefaultProperties {
+public interface VectorStoreAdmin {
 
-    /**
-     * SSE 全局超时时间（毫秒），兜底防止连接泄漏，默认 5 分钟
-     */
-    private Long sseTimeoutMs = 5 * 60 * 1000L;
+    void ensureVectorSpace(VectorSpaceSpec spec);
 
-    /**
-     * 默认向量维度（如 bge-m3: 1024）
-     */
-    private int dimension = 1024;
+    boolean vectorSpaceExists(VectorSpaceId spaceId);
 }

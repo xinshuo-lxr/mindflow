@@ -796,3 +796,46 @@ COMMENT ON COLUMN t_knowledge_document.updated_by IS '更新人';
 COMMENT ON COLUMN t_knowledge_document.create_time IS '创建时间';
 COMMENT ON COLUMN t_knowledge_document.update_time IS '更新时间';
 COMMENT ON COLUMN t_knowledge_document.deleted IS '是否删除 0：正常 1：删除';
+
+-- ============================================
+-- Knowledge Chunk & Vector Tables (Step 9)
+-- ============================================
+
+CREATE TABLE t_knowledge_chunk (
+    id              VARCHAR(20)  NOT NULL PRIMARY KEY,
+    kb_id           VARCHAR(20),
+    doc_id          VARCHAR(20),
+    chunk_index     INT,
+    content         TEXT,
+    content_hash    VARCHAR(64),
+    char_count      INT,
+    token_count     INT,
+    enabled         SMALLINT     DEFAULT 1,
+    created_by      VARCHAR(64),
+    updated_by      VARCHAR(64),
+    create_time     TIMESTAMP  DEFAULT CURRENT_TIMESTAMP,
+    update_time     TIMESTAMP  DEFAULT CURRENT_TIMESTAMP,
+    deleted         SMALLINT     DEFAULT 0
+);
+COMMENT ON TABLE t_knowledge_chunk IS '知识库文档分块表';
+COMMENT ON COLUMN t_knowledge_chunk.id IS '主键ID';
+COMMENT ON COLUMN t_knowledge_chunk.kb_id IS '知识库ID';
+COMMENT ON COLUMN t_knowledge_chunk.doc_id IS '文档ID';
+COMMENT ON COLUMN t_knowledge_chunk.chunk_index IS '分块序号';
+COMMENT ON COLUMN t_knowledge_chunk.content IS '分块正文内容';
+COMMENT ON COLUMN t_knowledge_chunk.content_hash IS '内容哈希';
+COMMENT ON COLUMN t_knowledge_chunk.char_count IS '字符数';
+COMMENT ON COLUMN t_knowledge_chunk.token_count IS 'Token数';
+COMMENT ON COLUMN t_knowledge_chunk.enabled IS '是否启用 0：禁用 1：启用';
+
+CREATE TABLE t_knowledge_vector (
+    id          VARCHAR(64) NOT NULL PRIMARY KEY,
+    content     TEXT,
+    metadata    JSONB,
+    embedding   vector(1024)
+);
+COMMENT ON TABLE t_knowledge_vector IS '知识库向量表';
+COMMENT ON COLUMN t_knowledge_vector.id IS 'chunk ID';
+COMMENT ON COLUMN t_knowledge_vector.content IS 'chunk 文本内容';
+COMMENT ON COLUMN t_knowledge_vector.metadata IS 'JSON元数据：collection_name, doc_id, chunk_index';
+COMMENT ON COLUMN t_knowledge_vector.embedding IS '向量(pgvector cosine检索)';

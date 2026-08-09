@@ -15,27 +15,24 @@
  * limitations under the License.
  */
 
-package com.xinshuo.mindflow.rag.config;
+package com.xinshuo.mindflow.rag.core.vector;
 
-import lombok.Data;
-import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.context.annotation.Configuration;
+import com.xinshuo.mindflow.core.chunk.VectorChunk;
+
+import java.util.List;
 
 /**
- * RAG 系统默认配置
+ * 向量存储服务接口
  */
-@Data
-@Configuration
-@ConfigurationProperties(prefix = "rag.default")
-public class RAGDefaultProperties {
+public interface VectorStoreService {
 
-    /**
-     * SSE 全局超时时间（毫秒），兜底防止连接泄漏，默认 5 分钟
-     */
-    private Long sseTimeoutMs = 5 * 60 * 1000L;
+    void indexDocumentChunks(String collectionName, String docId, List<VectorChunk> chunks);
 
-    /**
-     * 默认向量维度（如 bge-m3: 1024）
-     */
-    private int dimension = 1024;
+    void updateChunk(String collectionName, String docId, VectorChunk chunk);
+
+    void deleteDocumentVectors(String collectionName, String docId);
+
+    void deleteChunkById(String collectionName, String chunkId);
+
+    void deleteChunksByIds(String collectionName, List<String> chunkIds);
 }
