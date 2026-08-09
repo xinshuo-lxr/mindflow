@@ -88,6 +88,15 @@ public class KnowledgeDocumentController {
     }
 
     /**
+     * 开始分块：抽取文本 -> 分块 -> 嵌入并写入向量库
+     */
+    @PostMapping("/knowledge-base/docs/{doc-id}/chunk")
+    public Result<Void> startChunk(@PathVariable(value = "doc-id") String docId) {
+        documentService.startChunk(docId);
+        return Results.success();
+    }
+
+    /**
      * 删除文档：逻辑删除
      */
     @DeleteMapping("/knowledge-base/docs/{doc-id}")
