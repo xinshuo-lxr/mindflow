@@ -34,4 +34,9 @@ public class ChatStreamRequest {
      * 会话 ID，为空时自动创建新会话
      */
     private String conversationId;
+
+    /**
+     * 知识库 ID，非空时启用 RAG 检索
+     */
+    private String kbId;
 }

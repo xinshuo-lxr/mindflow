@@ -26,7 +26,10 @@ import com.xinshuo.mindflow.framework.convention.ChatRequest;
 import com.xinshuo.mindflow.infra.chat.LLMService;
 import com.xinshuo.mindflow.infra.chat.StreamCallback;
 import com.xinshuo.mindflow.infra.chat.StreamCancellationHandle;
+import com.xinshuo.mindflow.knowledge.dao.entity.KnowledgeBaseDO;
+import com.xinshuo.mindflow.knowledge.dao.mapper.KnowledgeBaseMapper;
 import com.xinshuo.mindflow.rag.core.memory.ConversationMemoryService;
+import com.xinshuo.mindflow.rag.core.prompt.RAGPromptService;
 import com.xinshuo.mindflow.rag.service.RAGChatService;
 import com.xinshuo.mindflow.rag.service.handler.StreamCallbackFactory;
 import com.xinshuo.mindflow.rag.service.handler.StreamTaskManager;
@@ -39,8 +42,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * RAG 对话服务实现——LLM 流式对话，支持多轮对话记忆
- * <p>后续步骤会在此之上叠加：向量检索 → 意图分类 → ... → 8 阶段管道
+ * RAG 对话服务实现——LLM 流式对话，支持多轮对话记忆 + RAG 检索
  */
 @Slf4j
 @Service
@@ -51,9 +53,11 @@ public class RAGChatServiceImpl implements RAGChatService {
     private final StreamCallbackFactory callbackFactory;
     private final StreamTaskManager taskManager;
     private final ConversationMemoryService memoryService;
+    private final RAGPromptService ragPromptService;
+    private final KnowledgeBaseMapper knowledgeBaseMapper;
 
     @Override
-    public void streamChat(String message, String conversationId, SseEmitter emitter) {
+    public void streamChat(String message, String conversationId, String kbId, SseEmitter emitter) {
         String userId = UserContext.getUserId();
         String actualConversationId = StrUtil.isBlank(conversationId)
                 ? IdUtil.getSnowflakeNextIdStr() : conversationId;
@@ -62,12 +66,27 @@ public class RAGChatServiceImpl implements RAGChatService {
         StreamCallback callback = callbackFactory.createChatEventHandler(
                 emitter, actualConversationId, taskId);
 
-        // 加载历史 + 保存用户消息
         List<ChatMessage> history = memoryService.loadAndAppend(
                 actualConversationId, userId, ChatMessage.user(message));
 
-        // loadAndAppend 返回的是追加前的历史，当前用户消息仍需加入模型请求。
         List<ChatMessage> messages = new ArrayList<>(history);
+
+        // Step 10: RAG 检索——有 kbId 时，检索知识库拼入 system prompt
+        if (StrUtil.isNotBlank(kbId)) {
+            KnowledgeBaseDO kb = knowledgeBaseMapper.selectById(kbId);
+            if (kb != null) {
+                String context = ragPromptService.buildContext(
+                        message, kb.getCollectionName(), 5);
+                if (StrUtil.isNotBlank(context)) {
+                    String systemPrompt = "你是知识库「" + kb.getName() + "」的智能助手。"
+                            + "请严格根据以下参考资料回答用户问题。"
+                            + "如果参考资料不足以回答，请如实告知'该知识库中暂无相关信息'。\n\n"
+                            + context;
+                    messages.add(0, ChatMessage.system(systemPrompt));
+                }
+            }
+        }
+
         messages.add(ChatMessage.user(message));
 
         ChatRequest chatRequest = ChatRequest.builder()
@@ -83,4 +102,3 @@ public class RAGChatServiceImpl implements RAGChatService {
         taskManager.cancel(taskId);
     }
 }
-
