@@ -1,7 +1,4 @@
-DROP TABLE IF EXISTS t_knowledge_vector;
-DROP TABLE IF EXISTS t_knowledge_chunk;
-
-CREATE TABLE t_knowledge_chunk (
+CREATE TABLE IF NOT EXISTS t_knowledge_chunk (
     id              VARCHAR(20)  NOT NULL PRIMARY KEY,
     kb_id           VARCHAR(20),
     doc_id          VARCHAR(20),
@@ -18,7 +15,7 @@ CREATE TABLE t_knowledge_chunk (
     deleted         SMALLINT     DEFAULT 0
 );
 
-CREATE TABLE t_knowledge_vector (
+CREATE TABLE IF NOT EXISTS t_knowledge_vector (
     id          VARCHAR(64) NOT NULL PRIMARY KEY,
     content     TEXT,
     metadata    JSONB,

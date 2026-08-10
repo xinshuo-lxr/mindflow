@@ -72,4 +72,23 @@ public class ThreadPoolExecutorConfig {
         );
         return TtlExecutors.getTtlExecutor(executor);
     }
+
+    /**
+     * 意图分类线程池——并行对各子问题进行意图识别
+     */
+    @Bean
+    public Executor intentClassifyExecutor() {
+        ThreadPoolExecutor executor = new ThreadPoolExecutor(
+                2, 4,
+                60L, TimeUnit.SECONDS,
+                new LinkedBlockingQueue<>(50),
+                r -> {
+                    Thread t = new Thread(r, "intent-classify-" + threadId.incrementAndGet());
+                    t.setDaemon(true);
+                    return t;
+                },
+                new ThreadPoolExecutor.CallerRunsPolicy()
+        );
+        return TtlExecutors.getTtlExecutor(executor);
+    }
 }
