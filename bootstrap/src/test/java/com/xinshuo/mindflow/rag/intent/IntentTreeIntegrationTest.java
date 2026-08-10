@@ -20,9 +20,13 @@ package com.xinshuo.mindflow.rag.intent;
 import com.xinshuo.mindflow.MindflowApplication;
 import com.xinshuo.mindflow.framework.convention.Result;
 import com.xinshuo.mindflow.rag.core.intent.IntentNode;
+import com.xinshuo.mindflow.rag.core.intent.IntentResolver;
+import com.xinshuo.mindflow.rag.core.intent.IntentTreeCacheManager;
 import com.xinshuo.mindflow.rag.core.intent.IntentTreeFactory;
 import com.xinshuo.mindflow.rag.core.intent.NodeScore;
 import com.xinshuo.mindflow.rag.core.intent.NodeScoreFilters;
+import com.xinshuo.mindflow.rag.dao.entity.IntentNodeDO;
+import com.xinshuo.mindflow.rag.dao.mapper.IntentNodeMapper;
 import com.xinshuo.mindflow.rag.enums.IntentKind;
 import com.xinshuo.mindflow.rag.enums.IntentLevel;
 import org.junit.jupiter.api.*;
@@ -35,6 +39,7 @@ import org.springframework.test.context.ActiveProfiles;
 
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -43,7 +48,7 @@ import static org.junit.jupiter.api.Assertions.*;
  *
  * <p>测试链路：登录→获取意图树→创建节点→更新节点→批量启用/停用→删除节点→从工厂初始化
  *
- * <p>不依赖 LLM 服务，聚焦意图树 CRUD 和内存模型验证
+ * <p>除 CRUD 和内存模型验证外，包含真实 LLM 的分类链路验证。
  */
 @SpringBootTest(
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
@@ -58,6 +63,15 @@ class IntentTreeIntegrationTest {
 
     @Autowired
     private TestRestTemplate restTemplate;
+
+    @Autowired
+    private IntentResolver intentResolver;
+
+    @Autowired
+    private IntentTreeCacheManager intentTreeCacheManager;
+
+    @Autowired
+    private IntentNodeMapper intentNodeMapper;
 
     private static String token;
     private static String nodeId;
@@ -294,6 +308,56 @@ class IntentTreeIntegrationTest {
         assertNull(IntentLevel.fromCode(99));
 
         System.out.println("[11] 枚举 fromCode 验证通过");
+    }
+
+    // ============ 真实 LLM 意图分类 ============
+
+    @Test
+    @Order(12)
+    void shouldClassifyKnownIntentWithRealLlm() {
+        String testCodePrefix = "llm" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
+        String rootCode = testCodePrefix + "r";
+        String topicCode = testCodePrefix + "t";
+        try {
+            intentNodeMapper.insert(IntentNodeDO.builder()
+                    .id(rootCode)
+                    .intentCode(rootCode)
+                    .name("星轨专项测试领域")
+                    .level(IntentLevel.DOMAIN.getCode())
+                    .kind(IntentKind.SYSTEM.getCode())
+                    .enabled(1)
+                    .deleted(0)
+                    .build());
+            intentNodeMapper.insert(IntentNodeDO.builder()
+                    .id(topicCode)
+                    .intentCode(topicCode)
+                    .parentCode(rootCode)
+                    .name("星轨差旅特别审批")
+                    .description("星轨项目的差旅特别审批、特殊差旅申请和审批规则")
+                    .level(IntentLevel.TOPIC.getCode())
+                    .kind(IntentKind.SYSTEM.getCode())
+                    .enabled(1)
+                    .deleted(0)
+                    .build());
+            // 分类器优先读 Redis；清缓存后才能加载本次写入 PostgreSQL 的测试节点。
+            intentTreeCacheManager.clearIntentTreeCache();
+
+            List<NodeScore> scores = intentResolver.resolve("星轨项目的差旅特别审批应该如何申请？");
+
+            assertFalse(scores.isEmpty(), "真实 LLM 应返回至少一个意图");
+            NodeScore topScore = scores.get(0);
+            assertEquals(topicCode, topScore.getNode().getId(),
+                    "星轨项目的专项问题应命中本次创建的专属意图节点");
+            assertTrue(topScore.getScore() >= 0.35D,
+                    "命中节点分数应达到意图路由阈值");
+
+            System.out.printf("[12] 真实 LLM 分类成功: %s, score=%.2f%n",
+                    topScore.getNode().getId(), topScore.getScore());
+        } finally {
+            intentNodeMapper.deleteById(topicCode);
+            intentNodeMapper.deleteById(rootCode);
+            intentTreeCacheManager.clearIntentTreeCache();
+        }
     }
 
     // ============ 辅助方法 ============
