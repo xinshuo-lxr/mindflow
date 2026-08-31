@@ -39,4 +39,9 @@ public class ChatStreamRequest {
      * 知识库 ID，非空时启用 RAG 检索
      */
     private String kbId;
+
+    /**
+     * 是否开启深度思考模式
+     */
+    private Boolean deepThinking;
 }

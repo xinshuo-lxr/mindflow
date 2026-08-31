@@ -19,6 +19,7 @@ package com.xinshuo.mindflow.rag.service.handler;
 
 import com.xinshuo.mindflow.infra.config.AIModelProperties;
 import com.xinshuo.mindflow.rag.core.memory.ConversationMemoryService;
+import com.xinshuo.mindflow.rag.service.ConversationGroupService;
 import lombok.Builder;
 import lombok.Getter;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -41,4 +42,6 @@ public class StreamChatHandlerParams {
     private final StreamTaskManager taskManager;
 
     private final ConversationMemoryService memoryService;
+
+    private final ConversationGroupService conversationGroupService;
 }

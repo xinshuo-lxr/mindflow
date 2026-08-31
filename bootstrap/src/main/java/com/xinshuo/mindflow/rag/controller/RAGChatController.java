@@ -63,7 +63,7 @@ public class RAGChatController {
         String conversationId = StrUtil.blankToDefault(request.getConversationId(), null);
         chatExecutor.execute(() -> {
             try {
-                ragChatService.streamChat(request.getMessage(), conversationId, request.getKbId(), emitter);
+                ragChatService.streamChat(request.getMessage(), conversationId, request.getDeepThinking(), request.getKbId(), emitter);
             } catch (Exception e) {
                 log.error("流式对话异常", e);
                 // SSE 响应不能再由全局异常处理器写入 JSON Result。

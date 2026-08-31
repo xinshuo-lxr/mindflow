@@ -60,7 +60,7 @@ public class RAGChatServiceImpl implements RAGChatService {
     private final KnowledgeBaseMapper knowledgeBaseMapper;
 
     @Override
-    public void streamChat(String message, String conversationId, String kbId, SseEmitter emitter) {
+    public void streamChat(String message, String conversationId, Boolean deepThinking, String kbId, SseEmitter emitter) {
         String userId = UserContext.getUserId();
         String actualConversationId = StrUtil.isBlank(conversationId)
                 ? IdUtil.getSnowflakeNextIdStr() : conversationId;
@@ -98,6 +98,7 @@ public class RAGChatServiceImpl implements RAGChatService {
 
         ChatRequest chatRequest = ChatRequest.builder()
                 .messages(messages)
+                .thinking(Boolean.TRUE.equals(deepThinking))
                 .build();
 
         StreamCancellationHandle handle = llmService.streamChat(chatRequest, callback);

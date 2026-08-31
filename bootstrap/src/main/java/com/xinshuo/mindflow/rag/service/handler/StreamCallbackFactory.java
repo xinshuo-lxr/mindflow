@@ -20,6 +20,7 @@ package com.xinshuo.mindflow.rag.service.handler;
 import com.xinshuo.mindflow.infra.chat.StreamCallback;
 import com.xinshuo.mindflow.infra.config.AIModelProperties;
 import com.xinshuo.mindflow.rag.core.memory.ConversationMemoryService;
+import com.xinshuo.mindflow.rag.service.ConversationGroupService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -34,6 +35,7 @@ public class StreamCallbackFactory {
     private final AIModelProperties modelProperties;
     private final StreamTaskManager taskManager;
     private final ConversationMemoryService memoryService;
+    private final ConversationGroupService conversationGroupService;
 
     public StreamCallback createChatEventHandler(SseEmitter emitter, String conversationId, String taskId) {
         StreamChatHandlerParams params = StreamChatHandlerParams.builder()
@@ -43,6 +45,7 @@ public class StreamCallbackFactory {
                 .modelProperties(modelProperties)
                 .taskManager(taskManager)
                 .memoryService(memoryService)
+                .conversationGroupService(conversationGroupService)
                 .build();
         return new StreamChatEventHandler(params);
     }

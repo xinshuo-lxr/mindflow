@@ -25,10 +25,12 @@ import com.xinshuo.mindflow.framework.web.SseEmitterSender;
 import com.xinshuo.mindflow.infra.chat.StreamCallback;
 import com.xinshuo.mindflow.infra.config.AIModelProperties;
 import com.xinshuo.mindflow.rag.core.memory.ConversationMemoryService;
+import com.xinshuo.mindflow.rag.dao.entity.ConversationDO;
 import com.xinshuo.mindflow.rag.dto.entry.CompletionPayload;
 import com.xinshuo.mindflow.rag.dto.entry.MessageDelta;
 import com.xinshuo.mindflow.rag.dto.entry.MetaPayload;
 import com.xinshuo.mindflow.rag.enums.SSEEventType;
+import com.xinshuo.mindflow.rag.service.ConversationGroupService;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.Optional;
@@ -36,7 +38,7 @@ import java.util.Optional;
 /**
  * SSE 流式事件处理器
  *
- * <p>第 6 步：onComplete 时通过 ConversationMemoryService 持久化 AI 回复
+ * <p>第 14 步：完善 thinking 处理（深度思考增量推送 + 时长统计）与会话标题发送
  */
 @Slf4j
 public class StreamChatEventHandler implements StreamCallback {
@@ -47,11 +49,12 @@ public class StreamChatEventHandler implements StreamCallback {
     private final int messageChunkSize;
     private final SseEmitterSender sender;
     private final String conversationId;
-    private final String taskId;
-    private final StreamTaskManager taskManager;
     private final ConversationMemoryService memoryService;
+    private final ConversationGroupService conversationGroupService;
+    private final String taskId;
     private final String userId;
-
+    private final StreamTaskManager taskManager;
+    private final boolean sendTitleOnComplete;
     private final StringBuilder answer = new StringBuilder();
     private final StringBuilder thinking = new StringBuilder();
     private long thinkingStartMs;
@@ -61,10 +64,16 @@ public class StreamChatEventHandler implements StreamCallback {
         this.sender = new SseEmitterSender(params.getEmitter());
         this.conversationId = params.getConversationId();
         this.taskId = params.getTaskId();
-        this.taskManager = params.getTaskManager();
         this.memoryService = params.getMemoryService();
+        this.conversationGroupService = params.getConversationGroupService();
+        this.taskManager = params.getTaskManager();
         this.userId = UserContext.getUserId();
+
+        // 计算配置
         this.messageChunkSize = resolveMessageChunkSize(params.getModelProperties());
+        this.sendTitleOnComplete = shouldSendTitle();
+
+        // 初始化（发送初始事件、注册任务）
         initialize();
     }
 
@@ -79,6 +88,20 @@ public class StreamChatEventHandler implements StreamCallback {
                 .orElse(5));
     }
 
+    /**
+     * 判断是否需要发送标题（首次对话或尚无标题时发送）
+     */
+    private boolean shouldSendTitle() {
+        ConversationDO existingConversation = conversationGroupService.findConversation(
+                conversationId,
+                userId
+        );
+        return existingConversation == null || StrUtil.isBlank(existingConversation.getTitle());
+    }
+
+    /**
+     * 构造取消时的完成载荷（如果有内容则先落库）
+     */
     private CompletionPayload buildCompletionPayloadOnCancel() {
         String content = answer.toString();
         String messageId = null;
@@ -91,7 +114,8 @@ public class StreamChatEventHandler implements StreamCallback {
                 log.error("取消时持久化消息失败，conversationId：{}", conversationId, e);
             }
         }
-        return new CompletionPayload(messageId, null);
+        String title = resolveTitleForEvent();
+        return new CompletionPayload(String.valueOf(messageId), title);
     }
 
     @Override
@@ -136,10 +160,11 @@ public class StreamChatEventHandler implements StreamCallback {
             ChatMessage message = ChatMessage.assistant(answer.toString(), thinkingContent, resolveThinkingDuration());
             messageId = memoryService.append(conversationId, userId, message);
         } catch (Exception e) {
-            log.error("持久化 AI 回复失败，conversationId：{}", conversationId, e);
+            log.error("对话完成时持久化消息失败，conversationId：{}", conversationId, e);
         }
+        String title = resolveTitleForEvent();
         String messageIdText = StrUtil.isBlank(messageId) ? null : messageId;
-        sender.sendEvent(SSEEventType.FINISH.value(), new CompletionPayload(messageIdText, null));
+        sender.sendEvent(SSEEventType.FINISH.value(), new CompletionPayload(messageIdText, title));
         sender.sendEvent(SSEEventType.DONE.value(), "[DONE]");
         taskManager.unregister(taskId);
         sender.complete();
@@ -150,11 +175,8 @@ public class StreamChatEventHandler implements StreamCallback {
         if (taskManager.isCancelled(taskId)) {
             return;
         }
-        log.error("流式对话失败，conversationId：{}，taskId：{}", conversationId, taskId, t);
         taskManager.unregister(taskId);
-        sender.sendEvent(SSEEventType.REJECT.value(), "流式对话失败，请稍后重试");
-        sender.sendEvent(SSEEventType.DONE.value(), "[DONE]");
-        sender.complete();
+        sender.fail(t);
     }
 
     private void sendChunked(String type, String content) {
@@ -180,5 +202,19 @@ public class StreamChatEventHandler implements StreamCallback {
 
     private Integer resolveThinkingDuration() {
         return thinkingDurationSeconds > 0 ? thinkingDurationSeconds : null;
+    }
+
+    /**
+     * 解析完成事件的会话标题：首次对话时返回 AI 生成的标题，否则返回默认文案
+     */
+    private String resolveTitleForEvent() {
+        if (!sendTitleOnComplete) {
+            return null;
+        }
+        ConversationDO conversation = conversationGroupService.findConversation(conversationId, userId);
+        if (conversation != null && StrUtil.isNotBlank(conversation.getTitle())) {
+            return conversation.getTitle();
+        }
+        return "新对话";
     }
 }
