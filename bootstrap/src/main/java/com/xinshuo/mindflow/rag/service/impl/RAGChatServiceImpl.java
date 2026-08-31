@@ -30,6 +30,8 @@ import com.xinshuo.mindflow.knowledge.dao.entity.KnowledgeBaseDO;
 import com.xinshuo.mindflow.knowledge.dao.mapper.KnowledgeBaseMapper;
 import com.xinshuo.mindflow.rag.core.memory.ConversationMemoryService;
 import com.xinshuo.mindflow.rag.core.prompt.RAGPromptService;
+import com.xinshuo.mindflow.rag.core.rewrite.QueryRewriteService;
+import com.xinshuo.mindflow.rag.core.rewrite.RewriteResult;
 import com.xinshuo.mindflow.rag.service.RAGChatService;
 import com.xinshuo.mindflow.rag.service.handler.StreamCallbackFactory;
 import com.xinshuo.mindflow.rag.service.handler.StreamTaskManager;
@@ -54,6 +56,7 @@ public class RAGChatServiceImpl implements RAGChatService {
     private final StreamTaskManager taskManager;
     private final ConversationMemoryService memoryService;
     private final RAGPromptService ragPromptService;
+    private final QueryRewriteService queryRewriteService;
     private final KnowledgeBaseMapper knowledgeBaseMapper;
 
     @Override
@@ -71,12 +74,16 @@ public class RAGChatServiceImpl implements RAGChatService {
 
         List<ChatMessage> messages = new ArrayList<>(history);
 
-        // Step 10: RAG 检索——有 kbId 时，检索知识库拼入 system prompt
+        // Step 10 + Step 12: RAG 检索——有 kbId 时，先改写问题再检索知识库拼入 system prompt
         if (StrUtil.isNotBlank(kbId)) {
             KnowledgeBaseDO kb = knowledgeBaseMapper.selectById(kbId);
             if (kb != null) {
+                // Step 12: 查询改写 + 多问句拆分——用改写后的问题检索，提升召回命中率
+                RewriteResult rewriteResult = queryRewriteService.rewriteWithSplit(message, history);
+                String retrievalQuery = rewriteResult.rewrittenQuestion();
+
                 String context = ragPromptService.buildContext(
-                        message, kb.getCollectionName(), 5);
+                        retrievalQuery, kb.getCollectionName(), 5);
                 if (StrUtil.isNotBlank(context)) {
                     String systemPrompt = "你是知识库「" + kb.getName() + "」的智能助手。"
                             + "请严格根据以下参考资料回答用户问题。"
