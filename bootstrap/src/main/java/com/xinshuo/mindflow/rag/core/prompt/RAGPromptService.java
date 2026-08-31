@@ -20,10 +20,15 @@ package com.xinshuo.mindflow.rag.core.prompt;
 import com.xinshuo.mindflow.framework.convention.RetrievedChunk;
 import com.xinshuo.mindflow.rag.core.retrieve.RetrieveRequest;
 import com.xinshuo.mindflow.rag.core.retrieve.RetrieverService;
+import com.xinshuo.mindflow.rag.core.retrieve.channel.SearchChannelResult;
+import com.xinshuo.mindflow.rag.core.retrieve.channel.SearchChannelType;
+import com.xinshuo.mindflow.rag.core.retrieve.channel.SearchContext;
+import com.xinshuo.mindflow.rag.core.retrieve.postprocessor.SearchResultPostProcessor;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.util.Comparator;
 import java.util.List;
 
 /**
@@ -36,6 +41,7 @@ public class RAGPromptService {
 
     private final RetrieverService retrieverService;
     private final ContextFormatter contextFormatter;
+    private final List<SearchResultPostProcessor> postProcessors;
 
     /**
      * 检索并格式化知识库上下文
@@ -52,8 +58,44 @@ public class RAGPromptService {
             log.info("RAG 检索无结果, collection={}", collectionName);
             return "";
         }
+
+        // Step 13: 后处理链（去重 → Rerank 精排）
+        chunks = applyPostProcessors(chunks, query, topK);
+
         String context = contextFormatter.formatKbContext(chunks);
         log.info("RAG 检索完成, collection={}, chunks={}, chars={}", collectionName, chunks.size(), context.length());
         return context;
+    }
+
+    /**
+     * 按 order 顺序执行后处理器链（去重 → Rerank 精排），
+     * 构造单通道检索结果作为处理链输入，为 Step 17 多通道铺路
+     */
+    private List<RetrievedChunk> applyPostProcessors(List<RetrievedChunk> chunks, String query, int topK) {
+        SearchContext context = SearchContext.builder()
+                .originalQuestion(query)
+                .rewrittenQuestion(query)
+                .topK(topK)
+                .build();
+
+        List<SearchChannelResult> results = List.of(
+                SearchChannelResult.builder()
+                        .channelType(SearchChannelType.VECTOR_GLOBAL)
+                        .chunks(chunks)
+                        .build()
+        );
+
+        List<SearchResultPostProcessor> chain = postProcessors.stream()
+                .sorted(Comparator.comparingInt(SearchResultPostProcessor::getOrder))
+                .toList();
+
+        List<RetrievedChunk> processed = chunks;
+        for (SearchResultPostProcessor processor : chain) {
+            if (!processor.isEnabled(context)) {
+                continue;
+            }
+            processed = processor.process(processed, results, context);
+        }
+        return processed;
     }
 }
