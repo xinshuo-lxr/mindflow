@@ -91,4 +91,23 @@ public class ThreadPoolExecutorConfig {
         );
         return TtlExecutors.getTtlExecutor(executor);
     }
+
+    /**
+     * 记忆摘要线程池——异步生成会话摘要，不阻塞对话主流程
+     */
+    @Bean
+    public Executor memorySummaryExecutor() {
+        ThreadPoolExecutor executor = new ThreadPoolExecutor(
+                2, 4,
+                60L, TimeUnit.SECONDS,
+                new LinkedBlockingQueue<>(50),
+                r -> {
+                    Thread t = new Thread(r, "memory-summary-" + threadId.incrementAndGet());
+                    t.setDaemon(true);
+                    return t;
+                },
+                new ThreadPoolExecutor.CallerRunsPolicy()
+        );
+        return TtlExecutors.getTtlExecutor(executor);
+    }
 }

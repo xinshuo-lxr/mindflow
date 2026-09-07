@@ -17,6 +17,7 @@
 
 package com.xinshuo.mindflow.rag.config;
 
+import com.xinshuo.mindflow.rag.config.validation.ValidMemoryConfig;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import lombok.Data;
@@ -44,6 +45,7 @@ import org.springframework.validation.annotation.Validated;
 @Configuration
 @ConfigurationProperties(prefix = "rag.memory")
 @Validated
+@ValidMemoryConfig
 public class MemoryProperties {
 
     /**

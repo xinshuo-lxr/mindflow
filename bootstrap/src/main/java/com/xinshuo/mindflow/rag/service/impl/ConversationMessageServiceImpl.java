@@ -23,8 +23,10 @@ import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.xinshuo.mindflow.rag.controller.vo.ConversationMessageVO;
 import com.xinshuo.mindflow.rag.dao.entity.ConversationDO;
 import com.xinshuo.mindflow.rag.dao.entity.ConversationMessageDO;
+import com.xinshuo.mindflow.rag.dao.entity.ConversationSummaryDO;
 import com.xinshuo.mindflow.rag.dao.mapper.ConversationMapper;
 import com.xinshuo.mindflow.rag.dao.mapper.ConversationMessageMapper;
+import com.xinshuo.mindflow.rag.dao.mapper.ConversationSummaryMapper;
 import com.xinshuo.mindflow.rag.enums.ConversationMessageOrder;
 import com.xinshuo.mindflow.rag.service.MessageFeedbackService;
 import com.xinshuo.mindflow.rag.service.ConversationMessageService;
@@ -52,6 +54,7 @@ public class ConversationMessageServiceImpl implements ConversationMessageServic
 
     private final ConversationMessageMapper conversationMessageMapper;
     private final ConversationMapper conversationMapper;
+    private final ConversationSummaryMapper conversationSummaryMapper;
     private final MessageFeedbackService feedbackService;
 
     @Override
@@ -122,10 +125,11 @@ public class ConversationMessageServiceImpl implements ConversationMessageServic
     }
 
     /**
-     * 添加对话摘要——第 15 步实现，当前空实现。
+     * 添加对话摘要——插入 t_conversation_summary，记录摘要覆盖的最后一条消息 ID
      */
     @Override
     public void addMessageSummary(ConversationSummaryBO conversationSummary) {
-        log.debug("对话摘要暂未启用，conversationId: {}", conversationSummary.getConversationId());
+        ConversationSummaryDO conversationSummaryDO = BeanUtil.toBean(conversationSummary, ConversationSummaryDO.class);
+        conversationSummaryMapper.insert(conversationSummaryDO);
     }
 }
