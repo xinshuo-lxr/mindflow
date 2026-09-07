@@ -72,6 +72,12 @@ ai:
     candidates:
       - { id: qwen3-rerank, provider: bailian, model: qwen3-rerank, priority: 1 }
 
+rag:
+  mcp:
+    servers:
+      - name: default
+        url: http://localhost:9099
+
 sa-token:
   token-name: Authorization
   timeout: 2592000
