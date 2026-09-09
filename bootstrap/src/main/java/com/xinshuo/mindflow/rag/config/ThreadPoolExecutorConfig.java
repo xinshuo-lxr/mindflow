@@ -110,4 +110,80 @@ public class ThreadPoolExecutorConfig {
         );
         return TtlExecutors.getTtlExecutor(executor);
     }
+
+    /**
+     * 多通道并行检索线程池——并行执行各检索通道
+     */
+    @Bean
+    public Executor ragRetrievalExecutor() {
+        ThreadPoolExecutor executor = new ThreadPoolExecutor(
+                4, 8,
+                60L, TimeUnit.SECONDS,
+                new LinkedBlockingQueue<>(100),
+                r -> {
+                    Thread t = new Thread(r, "rag-retrieval-" + threadId.incrementAndGet());
+                    t.setDaemon(true);
+                    return t;
+                },
+                new ThreadPoolExecutor.CallerRunsPolicy()
+        );
+        return TtlExecutors.getTtlExecutor(executor);
+    }
+
+    /**
+     * 通道内单目标并行检索线程池——并行检索多个意图/collection
+     */
+    @Bean
+    public Executor innerRetrievalExecutor() {
+        ThreadPoolExecutor executor = new ThreadPoolExecutor(
+                4, 8,
+                60L, TimeUnit.SECONDS,
+                new LinkedBlockingQueue<>(100),
+                r -> {
+                    Thread t = new Thread(r, "inner-retrieval-" + threadId.incrementAndGet());
+                    t.setDaemon(true);
+                    return t;
+                },
+                new ThreadPoolExecutor.CallerRunsPolicy()
+        );
+        return TtlExecutors.getTtlExecutor(executor);
+    }
+
+    /**
+     * RAG 上下文构建线程池——并行构建各子问题的 KB/MCP 上下文
+     */
+    @Bean
+    public Executor ragContextExecutor() {
+        ThreadPoolExecutor executor = new ThreadPoolExecutor(
+                2, 4,
+                60L, TimeUnit.SECONDS,
+                new LinkedBlockingQueue<>(50),
+                r -> {
+                    Thread t = new Thread(r, "rag-context-" + threadId.incrementAndGet());
+                    t.setDaemon(true);
+                    return t;
+                },
+                new ThreadPoolExecutor.CallerRunsPolicy()
+        );
+        return TtlExecutors.getTtlExecutor(executor);
+    }
+
+    /**
+     * MCP 工具批量调用线程池——并行执行多个 MCP 工具
+     */
+    @Bean
+    public Executor mcpBatchExecutor() {
+        ThreadPoolExecutor executor = new ThreadPoolExecutor(
+                2, 4,
+                60L, TimeUnit.SECONDS,
+                new LinkedBlockingQueue<>(50),
+                r -> {
+                    Thread t = new Thread(r, "mcp-batch-" + threadId.incrementAndGet());
+                    t.setDaemon(true);
+                    return t;
+                },
+                new ThreadPoolExecutor.CallerRunsPolicy()
+        );
+        return TtlExecutors.getTtlExecutor(executor);
+    }
 }

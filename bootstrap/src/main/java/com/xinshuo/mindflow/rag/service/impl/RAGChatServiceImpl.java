@@ -28,10 +28,15 @@ import com.xinshuo.mindflow.infra.chat.StreamCallback;
 import com.xinshuo.mindflow.infra.chat.StreamCancellationHandle;
 import com.xinshuo.mindflow.knowledge.dao.entity.KnowledgeBaseDO;
 import com.xinshuo.mindflow.knowledge.dao.mapper.KnowledgeBaseMapper;
+import com.xinshuo.mindflow.rag.core.intent.IntentNode;
+import com.xinshuo.mindflow.rag.core.intent.NodeScore;
 import com.xinshuo.mindflow.rag.core.memory.ConversationMemoryService;
-import com.xinshuo.mindflow.rag.core.prompt.RAGPromptService;
 import com.xinshuo.mindflow.rag.core.rewrite.QueryRewriteService;
 import com.xinshuo.mindflow.rag.core.rewrite.RewriteResult;
+import com.xinshuo.mindflow.rag.core.retrieve.RetrievalEngine;
+import com.xinshuo.mindflow.rag.dto.RetrievalContext;
+import com.xinshuo.mindflow.rag.dto.SubQuestionIntent;
+import com.xinshuo.mindflow.rag.enums.IntentKind;
 import com.xinshuo.mindflow.rag.service.RAGChatService;
 import com.xinshuo.mindflow.rag.service.handler.StreamCallbackFactory;
 import com.xinshuo.mindflow.rag.service.handler.StreamTaskManager;
@@ -44,7 +49,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * RAG 对话服务实现——LLM 流式对话，支持多轮对话记忆 + RAG 检索
+ * RAG 对话服务实现——LLM 流式对话，支持多轮对话记忆 + 多渠道检索
  */
 @Slf4j
 @Service
@@ -55,7 +60,7 @@ public class RAGChatServiceImpl implements RAGChatService {
     private final StreamCallbackFactory callbackFactory;
     private final StreamTaskManager taskManager;
     private final ConversationMemoryService memoryService;
-    private final RAGPromptService ragPromptService;
+    private final RetrievalEngine retrievalEngine;
     private final QueryRewriteService queryRewriteService;
     private final KnowledgeBaseMapper knowledgeBaseMapper;
 
@@ -74,7 +79,7 @@ public class RAGChatServiceImpl implements RAGChatService {
 
         List<ChatMessage> messages = new ArrayList<>(history);
 
-        // Step 10 + Step 12: RAG 检索——有 kbId 时，先改写问题再检索知识库拼入 system prompt
+        // Step 17: 多渠道检索——有 kbId 时，改写问题 → 构造指向该 KB 的高置信意图 → 多渠道检索引擎（意图定向精查 + 全局兜底）→ 拼 system prompt
         if (StrUtil.isNotBlank(kbId)) {
             KnowledgeBaseDO kb = knowledgeBaseMapper.selectById(kbId);
             if (kb != null) {
@@ -82,13 +87,23 @@ public class RAGChatServiceImpl implements RAGChatService {
                 RewriteResult rewriteResult = queryRewriteService.rewriteWithSplit(message, history);
                 String retrievalQuery = rewriteResult.rewrittenQuestion();
 
-                String context = ragPromptService.buildContext(
-                        retrievalQuery, kb.getCollectionName(), 5);
-                if (StrUtil.isNotBlank(context)) {
+                // 构造指向目标知识库 collection 的临时 KB 意图（置信度 1.0 → 意图定向通道生效、全局通道不兜底）
+                IntentNode intentNode = IntentNode.builder()
+                        .id("kb-" + kbId)
+                        .name(kb.getName())
+                        .collectionName(kb.getCollectionName())
+                        .kind(IntentKind.KB)
+                        .topK(5)
+                        .build();
+                SubQuestionIntent subIntent = new SubQuestionIntent(
+                        retrievalQuery, List.of(new NodeScore(intentNode, 1.0)));
+                RetrievalContext retrievalContext = retrievalEngine.retrieve(List.of(subIntent), 5);
+
+                if (retrievalContext.hasKb()) {
                     String systemPrompt = "你是知识库「" + kb.getName() + "」的智能助手。"
                             + "请严格根据以下参考资料回答用户问题。"
                             + "如果参考资料不足以回答，请如实告知'该知识库中暂无相关信息'。\n\n"
-                            + context;
+                            + retrievalContext.getKbContext();
                     messages.add(0, ChatMessage.system(systemPrompt));
                 }
             }
