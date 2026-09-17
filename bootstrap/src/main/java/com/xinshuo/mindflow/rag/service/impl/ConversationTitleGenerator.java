@@ -19,6 +19,7 @@ package com.xinshuo.mindflow.rag.service.impl;
 
 import com.xinshuo.mindflow.framework.convention.ChatMessage;
 import com.xinshuo.mindflow.framework.convention.ChatRequest;
+import com.xinshuo.mindflow.framework.trace.RagTraceNode;
 import com.xinshuo.mindflow.infra.chat.LLMService;
 import com.xinshuo.mindflow.rag.config.MemoryProperties;
 import com.xinshuo.mindflow.rag.core.prompt.PromptTemplateLoader;
@@ -55,6 +56,7 @@ public class ConversationTitleGenerator {
      * @param question 用户首条消息内容
      * @return 生成的标题，失败返回 "新对话"
      */
+    @RagTraceNode(name = "conversation-title-gen", type = "TITLE_GEN")
     public String generate(String question) {
         int maxLen = memoryProperties.getTitleMaxLength();
         if (maxLen <= 0) {

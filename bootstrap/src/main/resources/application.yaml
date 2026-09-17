@@ -73,6 +73,9 @@ ai:
       - { id: qwen3-rerank, provider: bailian, model: qwen3-rerank, priority: 1 }
 
 rag:
+  trace:
+    enabled: true
+    max-error-length: 1000
   mcp:
     servers:
       - name: default

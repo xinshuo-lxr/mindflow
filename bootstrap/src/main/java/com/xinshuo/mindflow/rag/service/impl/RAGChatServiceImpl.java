@@ -40,6 +40,7 @@ import com.xinshuo.mindflow.rag.enums.IntentKind;
 import com.xinshuo.mindflow.rag.service.RAGChatService;
 import com.xinshuo.mindflow.rag.service.handler.StreamCallbackFactory;
 import com.xinshuo.mindflow.rag.service.handler.StreamTaskManager;
+import com.xinshuo.mindflow.rag.trace.StreamChatTraceRunner;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -58,6 +59,7 @@ public class RAGChatServiceImpl implements RAGChatService {
 
     private final LLMService llmService;
     private final StreamCallbackFactory callbackFactory;
+    private final StreamChatTraceRunner traceRunner;
     private final StreamTaskManager taskManager;
     private final ConversationMemoryService memoryService;
     private final RetrievalEngine retrievalEngine;
@@ -66,7 +68,6 @@ public class RAGChatServiceImpl implements RAGChatService {
 
     @Override
     public void streamChat(String message, String conversationId, Boolean deepThinking, String kbId, SseEmitter emitter) {
-        String userId = UserContext.getUserId();
         String actualConversationId = StrUtil.isBlank(conversationId)
                 ? IdUtil.getSnowflakeNextIdStr() : conversationId;
         String taskId = IdUtil.getSnowflakeNextIdStr();
@@ -74,6 +75,17 @@ public class RAGChatServiceImpl implements RAGChatService {
         StreamCallback callback = callbackFactory.createChatEventHandler(
                 emitter, actualConversationId, taskId);
 
+        // Step 18: 全链路 Trace——包裹本次流式对话，记录 run 与各节点耗时
+        traceRunner.run(message, actualConversationId, taskId, callback, traceAware ->
+                doStreamChat(message, actualConversationId, taskId, deepThinking, kbId, traceAware));
+    }
+
+    /**
+     * 会话主流程：记忆加载 → 多渠道检索 → 组装 prompt → 流式输出
+     */
+    private void doStreamChat(String message, String actualConversationId, String taskId,
+                              Boolean deepThinking, String kbId, StreamCallback callback) {
+        String userId = UserContext.getUserId();
         List<ChatMessage> history = memoryService.loadAndAppend(
                 actualConversationId, userId, ChatMessage.user(message));
 

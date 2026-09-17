@@ -20,6 +20,7 @@ package com.xinshuo.mindflow.rag.core.retrieve;
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.StrUtil;
 import com.xinshuo.mindflow.framework.convention.RetrievedChunk;
+import com.xinshuo.mindflow.framework.trace.RagTraceNode;
 import com.xinshuo.mindflow.rag.config.SearchChannelProperties;
 import com.xinshuo.mindflow.rag.core.intent.IntentNode;
 import com.xinshuo.mindflow.rag.core.intent.NodeScore;
@@ -89,6 +90,7 @@ public class RetrievalEngine {
     /**
      * 检索方法：根据子问题意图列表执行检索，整合知识库和MCP工具的结果
      */
+    @RagTraceNode(name = "retrieval-engine", type = "RETRIEVE")
     public RetrievalContext retrieve(List<SubQuestionIntent> subIntents, int topK) {
         if (CollUtil.isEmpty(subIntents)) {
             return RetrievalContext.builder()

@@ -24,6 +24,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.xinshuo.mindflow.infra.util.LLMResponseCleaner;
+import com.xinshuo.mindflow.framework.trace.RagTraceNode;
 import com.xinshuo.mindflow.rag.config.RAGConfigProperties;
 import com.xinshuo.mindflow.framework.convention.ChatMessage;
 import com.xinshuo.mindflow.framework.convention.ChatRequest;
@@ -57,6 +58,7 @@ public class MultiQuestionRewriteService implements QueryRewriteService {
     private final PromptTemplateLoader promptTemplateLoader;
 
     @Override
+    @RagTraceNode(name = "query-rewrite", type = "REWRITE")
     public String rewrite(String userQuestion) {
         return rewriteAndSplit(userQuestion).rewrittenQuestion();
     }
@@ -67,6 +69,7 @@ public class MultiQuestionRewriteService implements QueryRewriteService {
     }
 
     @Override
+    @RagTraceNode(name = "query-rewrite-and-split", type = "REWRITE")
     public RewriteResult rewriteWithSplit(String userQuestion, List<ChatMessage> history) {
         // 开关关闭：直接做规则归一化 + 规则拆分
         if (!ragConfigProperties.getQueryRewriteEnabled()) {

@@ -18,6 +18,7 @@
 package com.xinshuo.mindflow.rag.core.intent;
 
 import cn.hutool.core.collection.CollUtil;
+import com.xinshuo.mindflow.framework.trace.RagTraceNode;
 import com.xinshuo.mindflow.rag.dto.IntentCandidate;
 import com.xinshuo.mindflow.rag.dto.IntentGroup;
 import com.xinshuo.mindflow.rag.dto.SubQuestionIntent;
@@ -73,6 +74,7 @@ public class IntentResolver {
      * @param subQuestions 子问题列表
      * @return 各子问题的意图分类结果
      */
+    @RagTraceNode(name = "intent-resolve", type = "INTENT")
     public List<SubQuestionIntent> resolve(List<String> subQuestions) {
         if (CollUtil.isEmpty(subQuestions)) {
             return List.of();

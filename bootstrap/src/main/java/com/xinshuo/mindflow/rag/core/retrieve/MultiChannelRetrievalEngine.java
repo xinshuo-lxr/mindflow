@@ -19,6 +19,7 @@ package com.xinshuo.mindflow.rag.core.retrieve;
 
 import cn.hutool.core.collection.CollUtil;
 import com.xinshuo.mindflow.framework.convention.RetrievedChunk;
+import com.xinshuo.mindflow.framework.trace.RagTraceNode;
 import com.xinshuo.mindflow.rag.core.retrieve.channel.SearchChannel;
 import com.xinshuo.mindflow.rag.core.retrieve.channel.SearchChannelResult;
 import com.xinshuo.mindflow.rag.core.retrieve.channel.SearchContext;
@@ -67,6 +68,7 @@ public class MultiChannelRetrievalEngine {
      * @param topK       期望返回的结果数量
      * @return 检索到的 Chunk 列表
      */
+    @RagTraceNode(name = "multi-channel-retrieval", type = "RETRIEVE_CHANNEL")
     public List<RetrievedChunk> retrieveKnowledgeChannels(List<SubQuestionIntent> subIntents, int topK) {
         // 构建检索上下文
         SearchContext context = buildSearchContext(subIntents, topK);
