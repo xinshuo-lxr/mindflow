@@ -15,39 +15,28 @@
  * limitations under the License.
  */
 
-package com.xinshuo.mindflow.rag.service.impl;
+package com.xinshuo.mindflow.rag.controller.request;
 
-import com.xinshuo.mindflow.rag.service.MessageFeedbackService;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
-
-import java.util.List;
-import java.util.Map;
+import lombok.Data;
 
 /**
- * 消息反馈服务空实现
+ * 会话消息反馈请求
  */
-@Slf4j
-@Service
-public class NoopMessageFeedbackServiceImpl implements MessageFeedbackService {
+@Data
+public class MessageFeedbackRequest {
 
-    @Override
-    public void submitFeedback(String messageId, Object request) {
+    /**
+     * 反馈值：1=点赞，-1=点踩
+     */
+    private Integer vote;
 
-    }
+    /**
+     * 反馈原因（可选）
+     */
+    private String reason;
 
-    @Override
-    public void submitFeedbackAsync(String messageId, Object request) {
-
-    }
-
-    @Override
-    public void submitFeedbackByEvent(Object event) {
-
-    }
-
-    @Override
-    public Map<String, Integer> getUserVotes(String userId, List<String> messageIds) {
-        return Map.of();
-    }
+    /**
+     * 补充说明（可选）
+     */
+    private String comment;
 }

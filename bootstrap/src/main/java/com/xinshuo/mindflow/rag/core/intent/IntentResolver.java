@@ -19,6 +19,7 @@ package com.xinshuo.mindflow.rag.core.intent;
 
 import cn.hutool.core.collection.CollUtil;
 import com.xinshuo.mindflow.framework.trace.RagTraceNode;
+import com.xinshuo.mindflow.rag.core.rewrite.RewriteResult;
 import com.xinshuo.mindflow.rag.dto.IntentCandidate;
 import com.xinshuo.mindflow.rag.dto.IntentGroup;
 import com.xinshuo.mindflow.rag.dto.SubQuestionIntent;
@@ -66,6 +67,22 @@ public class IntentResolver {
      */
     public List<NodeScore> resolve(String question) {
         return classifyIntents(question);
+    }
+
+    /**
+     * 对改写结果进行意图分类（与 ragent 对齐的入口）
+     * <p>
+     * 子问题列表为空时回退到改写后的主问题，保证任何输入都至少产生一次意图识别。
+     *
+     * @param rewriteResult 查询改写结果
+     * @return 各子问题的意图分类结果
+     */
+    @RagTraceNode(name = "intent-resolve", type = "INTENT")
+    public List<SubQuestionIntent> resolve(RewriteResult rewriteResult) {
+        List<String> subQuestions = CollUtil.isNotEmpty(rewriteResult.subQuestions())
+                ? rewriteResult.subQuestions()
+                : List.of(rewriteResult.rewrittenQuestion());
+        return resolve(subQuestions);
     }
 
     /**

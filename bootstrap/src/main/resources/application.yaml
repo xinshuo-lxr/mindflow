@@ -88,6 +88,10 @@ rag:
       - name: default
         url: http://localhost:9099
 
+app:
+  eval:
+    enabled: true
+
 sa-token:
   token-name: Authorization
   timeout: 2592000
