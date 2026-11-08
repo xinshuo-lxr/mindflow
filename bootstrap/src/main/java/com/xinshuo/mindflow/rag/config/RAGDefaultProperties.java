@@ -38,4 +38,9 @@ public class RAGDefaultProperties {
      * 默认向量维度（如 bge-m3: 1024）
      */
     private int dimension = 1024;
+
+    /**
+     * 默认向量集合名称（摄取流水线未显式指定向量空间时使用）
+     */
+    private String collectionName;
 }

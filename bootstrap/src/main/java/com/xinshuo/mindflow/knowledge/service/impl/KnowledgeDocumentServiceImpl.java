@@ -35,6 +35,12 @@ import com.xinshuo.mindflow.core.parser.DocumentParserSelector;
 import com.xinshuo.mindflow.core.parser.model.ParsedDocument;
 import com.xinshuo.mindflow.framework.context.UserContext;
 import com.xinshuo.mindflow.framework.exception.ClientException;
+import com.xinshuo.mindflow.ingestion.domain.context.DocumentSource;
+import com.xinshuo.mindflow.ingestion.domain.context.IngestionContext;
+import com.xinshuo.mindflow.ingestion.domain.enums.IngestionStatus;
+import com.xinshuo.mindflow.ingestion.domain.pipeline.PipelineDefinition;
+import com.xinshuo.mindflow.ingestion.engine.IngestionEngine;
+import com.xinshuo.mindflow.ingestion.service.IngestionPipelineService;
 import com.xinshuo.mindflow.ingestion.util.MimeTypeDetector;
 import com.xinshuo.mindflow.knowledge.controller.request.KnowledgeDocumentPageRequest;
 import com.xinshuo.mindflow.knowledge.controller.request.KnowledgeDocumentUpdateRequest;
@@ -54,6 +60,7 @@ import com.xinshuo.mindflow.knowledge.handler.RemoteFileFetcher;
 import com.xinshuo.mindflow.knowledge.service.KnowledgeChunkService;
 import com.xinshuo.mindflow.knowledge.service.KnowledgeDocumentScheduleService;
 import com.xinshuo.mindflow.knowledge.service.KnowledgeDocumentService;
+import com.xinshuo.mindflow.rag.core.vector.VectorSpaceId;
 import com.xinshuo.mindflow.rag.core.vector.VectorStoreService;
 import com.xinshuo.mindflow.rag.dto.StoredFileDTO;
 import com.xinshuo.mindflow.rag.service.FileStorageService;
@@ -95,6 +102,8 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
     private final TransactionOperations transactionOperations;
     private final KnowledgeDocumentScheduleService scheduleService;
     private final RemoteFileFetcher remoteFileFetcher;
+    private final IngestionEngine ingestionEngine;
+    private final IngestionPipelineService ingestionPipelineService;
 
     @Override
     public KnowledgeDocumentVO upload(String kbId, KnowledgeDocumentUploadRequest requestParam, MultipartFile file) {
@@ -201,6 +210,12 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
      */
     public void chunkDocument(KnowledgeDocumentDO doc) {
         String docId = doc.getId();
+        // process_mode=pipeline 时走可编排的摄取流水线
+        if (ProcessMode.PIPELINE == ProcessMode.fromValue(doc.getProcessMode())
+                && StringUtils.hasText(doc.getPipelineId())) {
+            runPipelineProcess(doc);
+            return;
+        }
         // 状态流转: pending → running
         documentMapper.update(
                 new LambdaUpdateWrapper<KnowledgeDocumentDO>()
@@ -261,6 +276,91 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
             log.info("文档分块+持久化完成, docId={}, chunks={}", docId, chunks.size());
         } catch (Exception e) {
             log.error("文档分块失败, docId={}", docId, e);
+            documentMapper.update(
+                    new LambdaUpdateWrapper<KnowledgeDocumentDO>()
+                            .set(KnowledgeDocumentDO::getStatus, DocumentStatus.FAILED.getCode())
+                            .eq(KnowledgeDocumentDO::getId, docId)
+            );
+        }
+    }
+
+    /**
+     * 执行可编排的摄取流水线（process_mode=pipeline）
+     * <p>
+     * 流水线内 ChunkerNode 已生成 embedding；IndexerNode 以 skipIndexerWrite=true 只做校验，
+     * 分块与向量由这里在同一事务内统一落库。
+     */
+    private void runPipelineProcess(KnowledgeDocumentDO doc) {
+        String docId = doc.getId();
+        documentMapper.update(
+                new LambdaUpdateWrapper<KnowledgeDocumentDO>()
+                        .set(KnowledgeDocumentDO::getStatus, DocumentStatus.RUNNING.getCode())
+                        .eq(KnowledgeDocumentDO::getId, docId)
+                        .ne(KnowledgeDocumentDO::getStatus, DocumentStatus.RUNNING.getCode())
+        );
+
+        try {
+            KnowledgeBaseDO kb = knowledgeBaseMapper.selectById(doc.getKbId());
+            Assert.notNull(kb, () -> new ClientException("知识库不存在"));
+
+            byte[] fileBytes;
+            try (InputStream is = fileStorageService.openStream(doc.getFileUrl())) {
+                fileBytes = is.readAllBytes();
+            }
+            String mime = MimeTypeDetector.detect(fileBytes, doc.getDocName());
+
+            PipelineDefinition pipeline = ingestionPipelineService.getDefinition(doc.getPipelineId());
+            IngestionContext context = IngestionContext.builder()
+                    .taskId(docId)
+                    .pipelineId(doc.getPipelineId())
+                    .source(DocumentSource.builder()
+                            .type(com.xinshuo.mindflow.ingestion.domain.enums.SourceType.FILE)
+                            .location(doc.getFileUrl())
+                            .fileName(doc.getDocName())
+                            .build())
+                    .rawBytes(fileBytes)
+                    .mimeType(mime)
+                    .vectorSpaceId(VectorSpaceId.builder().logicalName(kb.getCollectionName()).build())
+                    .skipIndexerWrite(true)
+                    .logs(new ArrayList<>())
+                    .build();
+
+            IngestionContext result = ingestionEngine.execute(pipeline, context);
+            if (result.getStatus() != IngestionStatus.COMPLETED
+                    || result.getChunks() == null || result.getChunks().isEmpty()) {
+                String reason = result.getError() == null
+                        ? String.valueOf(result.getStatus())
+                        : result.getError().getMessage();
+                throw new ClientException("摄取流水线未产出分块: " + reason);
+            }
+
+            List<VectorChunk> chunks = result.getChunks();
+            List<KnowledgeChunkCreateRequest> chunkReqs = new ArrayList<>(chunks.size());
+            for (VectorChunk vc : chunks) {
+                KnowledgeChunkCreateRequest req = new KnowledgeChunkCreateRequest();
+                req.setChunkId(vc.getChunkId());
+                req.setIndex(vc.getIndex());
+                req.setContent(vc.getContent());
+                chunkReqs.add(req);
+            }
+
+            String collectionName = kb.getCollectionName();
+            transactionOperations.executeWithoutResult(status -> {
+                knowledgeChunkService.deleteByDocId(docId);
+                knowledgeChunkService.batchCreate(docId, chunkReqs, false);
+                vectorStoreService.deleteDocumentVectors(collectionName, docId);
+                vectorStoreService.indexDocumentChunks(collectionName, docId, chunks);
+                documentMapper.update(
+                        new LambdaUpdateWrapper<KnowledgeDocumentDO>()
+                                .set(KnowledgeDocumentDO::getChunkCount, chunks.size())
+                                .set(KnowledgeDocumentDO::getStatus, DocumentStatus.SUCCESS.getCode())
+                                .set(KnowledgeDocumentDO::getUpdatedBy, UserContext.getUsername())
+                                .eq(KnowledgeDocumentDO::getId, docId)
+                );
+            });
+            log.info("流水线分块+持久化完成, docId={}, chunks={}", docId, chunks.size());
+        } catch (Exception e) {
+            log.error("流水线分块失败, docId={}", docId, e);
             documentMapper.update(
                     new LambdaUpdateWrapper<KnowledgeDocumentDO>()
                             .set(KnowledgeDocumentDO::getStatus, DocumentStatus.FAILED.getCode())
