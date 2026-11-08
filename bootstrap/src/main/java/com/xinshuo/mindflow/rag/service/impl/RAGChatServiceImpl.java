@@ -40,6 +40,7 @@ import com.xinshuo.mindflow.rag.enums.IntentKind;
 import com.xinshuo.mindflow.rag.service.RAGChatService;
 import com.xinshuo.mindflow.rag.service.handler.StreamCallbackFactory;
 import com.xinshuo.mindflow.rag.service.handler.StreamTaskManager;
+import com.xinshuo.mindflow.rag.service.ratelimit.ChatQueueLimiter;
 import com.xinshuo.mindflow.rag.trace.StreamChatTraceRunner;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -59,6 +60,7 @@ public class RAGChatServiceImpl implements RAGChatService {
 
     private final LLMService llmService;
     private final StreamCallbackFactory callbackFactory;
+    private final ChatQueueLimiter chatQueueLimiter;
     private final StreamChatTraceRunner traceRunner;
     private final StreamTaskManager taskManager;
     private final ConversationMemoryService memoryService;
@@ -75,9 +77,11 @@ public class RAGChatServiceImpl implements RAGChatService {
         StreamCallback callback = callbackFactory.createChatEventHandler(
                 emitter, actualConversationId, taskId);
 
-        // Step 18: 全链路 Trace——包裹本次流式对话，记录 run 与各节点耗时
-        traceRunner.run(message, actualConversationId, taskId, callback, traceAware ->
-                doStreamChat(message, actualConversationId, taskId, deepThinking, kbId, traceAware));
+        // Step 19: 全局并发限流——超出并发上限时排队，等位超时走 reject 流程；
+        // 拿到 permit 后进入 Step 18 的全链路 Trace 包裹，再执行对话主流程
+        chatQueueLimiter.enqueue(message, actualConversationId, emitter, () ->
+                traceRunner.run(message, actualConversationId, taskId, callback, traceAware ->
+                        doStreamChat(message, actualConversationId, taskId, deepThinking, kbId, traceAware)));
     }
 
     /**

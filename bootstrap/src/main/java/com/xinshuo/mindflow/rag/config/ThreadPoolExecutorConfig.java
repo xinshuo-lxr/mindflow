@@ -23,6 +23,7 @@ import org.springframework.context.annotation.Configuration;
 
 import java.util.concurrent.Executor;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -184,6 +185,30 @@ public class ThreadPoolExecutorConfig {
                 },
                 new ThreadPoolExecutor.CallerRunsPolicy()
         );
+        return TtlExecutors.getTtlExecutor(executor);
+    }
+
+    /**
+     * SSE 排队后执行入口线程池——与全局限流 permit 数一致
+     * <p>
+     * core = max = max-concurrent，SynchronousQueue 无缓冲，AbortPolicy 在饱和时抛
+     * RejectedExecutionException 交由 {@code ChatQueueLimiter} 走 reject 流程
+     */
+    @Bean
+    public Executor chatEntryExecutor(RAGRateLimitProperties rateLimitProperties) {
+        int size = rateLimitProperties.getGlobalMaxConcurrent();
+        ThreadPoolExecutor executor = new ThreadPoolExecutor(
+                size, size,
+                60L, TimeUnit.SECONDS,
+                new SynchronousQueue<>(),
+                r -> {
+                    Thread t = new Thread(r, "chat-entry-" + threadId.incrementAndGet());
+                    t.setDaemon(true);
+                    return t;
+                },
+                new ThreadPoolExecutor.AbortPolicy()
+        );
+        executor.allowCoreThreadTimeOut(true);
         return TtlExecutors.getTtlExecutor(executor);
     }
 }
