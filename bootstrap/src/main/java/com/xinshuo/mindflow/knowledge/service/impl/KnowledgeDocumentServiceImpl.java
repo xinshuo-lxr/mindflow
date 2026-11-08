@@ -50,7 +50,9 @@ import com.xinshuo.mindflow.knowledge.dao.mapper.KnowledgeDocumentMapper;
 import com.xinshuo.mindflow.knowledge.enums.DocumentStatus;
 import com.xinshuo.mindflow.knowledge.enums.ProcessMode;
 import com.xinshuo.mindflow.knowledge.enums.SourceType;
+import com.xinshuo.mindflow.knowledge.handler.RemoteFileFetcher;
 import com.xinshuo.mindflow.knowledge.service.KnowledgeChunkService;
+import com.xinshuo.mindflow.knowledge.service.KnowledgeDocumentScheduleService;
 import com.xinshuo.mindflow.knowledge.service.KnowledgeDocumentService;
 import com.xinshuo.mindflow.rag.core.vector.VectorStoreService;
 import com.xinshuo.mindflow.rag.dto.StoredFileDTO;
@@ -66,6 +68,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.util.ArrayList;
 
 import java.io.InputStream;
+import java.nio.file.Files;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -90,6 +93,8 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
     private final KnowledgeChunkService knowledgeChunkService;
     private final VectorStoreService vectorStoreService;
     private final TransactionOperations transactionOperations;
+    private final KnowledgeDocumentScheduleService scheduleService;
+    private final RemoteFileFetcher remoteFileFetcher;
 
     @Override
     public KnowledgeDocumentVO upload(String kbId, KnowledgeDocumentUploadRequest requestParam, MultipartFile file) {
@@ -104,15 +109,39 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
         if (SourceType.FILE == sourceType) {
             Assert.notNull(file, () -> new ClientException("上传文件不能为空"));
         }
-        if (SourceType.URL == sourceType) {
-            throw new ClientException("暂不支持 URL 来源，请使用 file 上传");
-        }
 
         if (!fileStorageService.bucketExists(kbDO.getCollectionName())) {
             fileStorageService.createBucket(kbDO.getCollectionName());
         }
 
-        StoredFileDTO stored = fileStorageService.upload(kbDO.getCollectionName(), file);
+        StoredFileDTO stored;
+        if (SourceType.URL == sourceType) {
+            // URL 来源：拉取远程文件后落库，后续可被定时任务刷新
+            String sourceLocation = StrUtil.trimToNull(requestParam.getSourceLocation());
+            if (sourceLocation == null) {
+                throw new ClientException("远程文件地址不能为空");
+            }
+            try (RemoteFileFetcher.RemoteFetchResult fetchResult =
+                         remoteFileFetcher.fetch(sourceLocation, "remote-document")) {
+                if (fetchResult.tempFile() == null) {
+                    throw new ClientException("远程文件内容未获取到");
+                }
+                try (InputStream in = Files.newInputStream(fetchResult.tempFile())) {
+                    stored = fileStorageService.upload(
+                            kbDO.getCollectionName(),
+                            in,
+                            fetchResult.size(),
+                            fetchResult.fileName(),
+                            fetchResult.contentType());
+                }
+            } catch (ClientException e) {
+                throw e;
+            } catch (Exception e) {
+                throw new ClientException("远程文件拉取失败: " + e.getMessage());
+            }
+        } else {
+            stored = fileStorageService.upload(kbDO.getCollectionName(), file);
+        }
 
         ProcessMode processMode = resolveProcessMode(requestParam);
 
@@ -138,6 +167,8 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
                 .updatedBy(UserContext.getUsername())
                 .build();
         documentMapper.insert(documentDO);
+        // URL 来源且开启定时：同步创建定时刷新任务
+        scheduleService.upsertSchedule(documentDO);
 
         log.info("文档上传成功, kbId={}, docId={}, docName={}, fileType={}",
                 kbId, documentDO.getId(), documentDO.getDocName(), documentDO.getFileType());
@@ -157,6 +188,19 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
             log.warn("文档不存在，跳过分块, docId={}", docId);
             return;
         }
+        chunkDocument(doc);
+    }
+
+    /**
+     * 按给定文档快照执行分块
+     * <p>
+     * 定时刷新场景会传入带有新 fileUrl 的运行时文档，避免先落库文件元数据再接分块，
+     * 分块成功后才由调用方切换文件元数据（与 ragent chunkDocument 语义一致）。
+     *
+     * @param doc 文档快照（id 必填）
+     */
+    public void chunkDocument(KnowledgeDocumentDO doc) {
+        String docId = doc.getId();
         // 状态流转: pending → running
         documentMapper.update(
                 new LambdaUpdateWrapper<KnowledgeDocumentDO>()
@@ -240,6 +284,9 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
         documentDO.setUpdatedBy(UserContext.getUsername());
         documentMapper.deleteById(documentDO);
 
+        // 删除关联的定时任务与执行记录
+        scheduleService.deleteByDocId(docId);
+
         // 清理存储文件
         deleteStoredFileQuietly(documentDO);
 
@@ -274,10 +321,22 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
                 .set(KnowledgeDocumentDO::getDocName, docName.trim())
                 .set(KnowledgeDocumentDO::getUpdatedBy, UserContext.getUsername());
 
-        // 后续实现：补充 processMode / chunkStrategy / chunkConfig 更新逻辑
-        // 后续实现：补充定时调度字段更新
+        if (requestParam.getSourceLocation() != null) {
+            documentDO.setSourceLocation(StrUtil.trimToNull(requestParam.getSourceLocation()));
+            updateWrapper.set(KnowledgeDocumentDO::getSourceLocation, documentDO.getSourceLocation());
+        }
+        if (requestParam.getScheduleEnabled() != null) {
+            documentDO.setScheduleEnabled(requestParam.getScheduleEnabled());
+            updateWrapper.set(KnowledgeDocumentDO::getScheduleEnabled, requestParam.getScheduleEnabled());
+        }
+        if (requestParam.getScheduleCron() != null) {
+            documentDO.setScheduleCron(StrUtil.trimToNull(requestParam.getScheduleCron()));
+            updateWrapper.set(KnowledgeDocumentDO::getScheduleCron, documentDO.getScheduleCron());
+        }
 
         documentMapper.update(updateWrapper);
+        // 定时配置变更后同步调度表（URL 来源才会真正落任务）
+        scheduleService.upsertSchedule(documentDO);
         log.info("文档更新成功, docId={}, newName={}", docId, docName);
     }
 
@@ -361,6 +420,8 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
         documentDO.setEnabled(targetEnabled);
         documentDO.setUpdatedBy(UserContext.getUsername());
         documentMapper.updateById(documentDO);
+        // 文档启用/禁用时同步已存在的定时任务（禁用则关闭调度）
+        scheduleService.syncScheduleIfExists(documentDO);
 
         // 第 9 步：补充启用时重建向量、禁用时清理向量
         log.info("文档{}成功, docId={}", enabled ? "启用" : "禁用", docId);

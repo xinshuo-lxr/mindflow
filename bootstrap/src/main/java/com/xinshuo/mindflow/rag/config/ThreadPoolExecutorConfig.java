@@ -189,6 +189,28 @@ public class ThreadPoolExecutorConfig {
     }
 
     /**
+     * 知识库文档分块线程池——定时刷新任务在此异步执行
+     * <p>
+     * 队列满时抛 RejectedExecutionException，由定时扫描逻辑捕获并释放调度锁
+     */
+    @Bean
+    public Executor knowledgeChunkExecutor() {
+        int cores = Runtime.getRuntime().availableProcessors();
+        ThreadPoolExecutor executor = new ThreadPoolExecutor(
+                Math.max(2, cores / 2), Math.max(4, cores),
+                60L, TimeUnit.SECONDS,
+                new LinkedBlockingQueue<>(200),
+                r -> {
+                    Thread t = new Thread(r, "kb-chunk-" + threadId.incrementAndGet());
+                    t.setDaemon(true);
+                    return t;
+                },
+                new ThreadPoolExecutor.AbortPolicy()
+        );
+        return TtlExecutors.getTtlExecutor(executor);
+    }
+
+    /**
      * SSE 排队后执行入口线程池——与全局限流 permit 数一致
      * <p>
      * core = max = max-concurrent，SynchronousQueue 无缓冲，AbortPolicy 在饱和时抛
