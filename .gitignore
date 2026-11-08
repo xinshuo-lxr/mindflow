@@ -1,0 +1,47 @@
+# Maven
+target/
+!.mvn/wrapper/maven-wrapper.jar
+
+# IDE
+.idea/
+*.iml
+*.iws
+*.ipr
+.vscode/
+.settings/
+.project
+.classpath
+.factorypath
+/bin/
+
+# OS
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# Logs
+*.log
+logs/
+
+# Spring Boot
+spring-shell.log
+# 本地配置含真实 API Key，不入库
+application-local.yaml
+application-local.yml
+
+# Node / Frontend
+node_modules/
+dist/
+.env.local
+.env.*.local
+
+# Claude
+.claude/
+
+# 本地文件存储（LocalFileStorageService 运行时产物）
+/bootstrap/mindflow-data/
+
+# Temporary
+*.tmp
+*.bak
